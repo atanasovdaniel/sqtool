@@ -1,0 +1,36 @@
+
+SQtool is internaly UTF-8 only:
+- SQUIRREL is configured without SQUNICODE.
+- As Windows APIs are natively UCS2/(UTF-16), all strings passed to/from Windows API functions are converted to/from UCS2.
+
+The 'sqtlib' used in sqtool is different from SQUIRREL's 'sqstdlib', but is still compatible to original one.
+
+API changes:
+- SQFILE now represents SQStream class, not FILE*. So every class extending SQStream can be accessed by sqstd_xxx API: sqstd_fread, sqstd_fwrite, sqstd_fseek, sqstd_ftell, sqstd_fflush, sqstd_feof, sqstd_fclose
+	Two functions are with different parameters - more common API is used, only size to read/write is given instead of size and count: sqstd_fread and sqstd_fwrite.
+- Two more methods are added to SQStream to help generalization of stream: Close and _Release.
+
+API added:
+- Three function are added to iteract with streams - sqt_loadfile, sqt_dofile and sqt_writeclosure.
+- New SQTStreamReader is implemented based on SQStream. Stream reader gives ability to virtualy 'mark' and 'reset' position of readed SQStream (see sqt_loadfile).
+	Functions added: sqtsrdr_create, sqtsrdr_mark, sqtsrdr_reset
+- Declaration helpers: sqt_declareclass and sqt_declarefunctions
+- Functions to convert UTF-8 to/from _WIN32-wchar_t
+
+From scripting side:
+- Functions loadfile, dofile and writeclosuretofile can allso read/write from stream.
+- 'stream' class has two new methods - print and readline
+- Added 'streamreader' calss.
+- Added 'popen' class.
+- Script name is passed as argument 0
+
+Content of 'sqtlib' folder:
+- sqstdblob.cpp - minor changes - tailored to SQStream.
+- sqstdblobimpl.h - minor changes - tailored to SQStream.
+- sqstdio.cpp - left only FILE/'file' related functions, added popen SQFPipe/'popen'.
+- sqstdstream.cpp - all SQStream/'stream' functionality moved here.
+- sqstdsystem.cpp - OS specifics.
+- sqt_decl.c - Helpers for class/functions declaration.
+- sqt_squirrelio.cpp - SQUIRREL-I/O functions aka loadfile, dofile and writeclosuretofile.
+- sqt_streamreader.cpp - SQTStreamReader class
+- sqt_wstr.c - _WIN32 UTF-8 to/from wchar_t helpers
