@@ -3,5 +3,9 @@ SQTool is a portable general purpose scripting tool powered by The programming l
 SQTool is currently in development phase, so any API can change by name and/or by functionality.
 see NOTES
 
+This project has successfully been compiled and run on
+ * Windows x86 (gcc)
+ * Linux x86
+
 Autor: Daniel Atanasov
 e-mail: danielatanasov//gmail//com
