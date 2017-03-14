@@ -123,7 +123,7 @@ static SQRESULT read_float( SQREADFUNC readfct, SQUserPointer user, SQInteger le
 1111 1111	- *
 */
 
-SQRESULT sqt_serbin_read_one( HSQUIRRELVM v SQREADFUNC readfct, SQUserPointer user)
+SQRESULT sqt_serbin_read( HSQUIRRELVM v SQREADFUNC readfct, SQUserPointer user)
 {
 	SQUnsignedInteger len;
 	unsigned char b;
@@ -196,34 +196,42 @@ rd_string:
 rd_array:
 	{
 		SQInteger idx = 0;
-		sq_newarray(v,len);						// array
+		sq_newarray(v,len);										// array
 		while( len) {
-			sq_pushinteger(v,idx);				// array, index
-			if( SQ_SUCCEEDED( read_one( fct, user))) {	// array, index, value
-				sq_set(v,-3);					// array
-				len--;
-				idx++;
-				continue;
+			sq_pushinteger(v,idx);								// array, index
+			if( SQ_SUCCEEDED( sqt_serbin_read( fct, user))) {	// array, index, value
+				if( SQ_SUCCEEDED(sq_set(v,-3))) {				// array
+					len--;
+					idx++;
+					continue;
+				}
 			}
-			sq_pop(v,2);						//
+			sq_pop(v,2);										//
 			return SQ_ERROR;
 		}
 		return SQ_OK;
 	}
 
 rd_table:
-	sq_newtableex(v, len);						// table
+	sq_newtableex(v, len);										// table
 	while( len) {
-		if( SQ_SUCCEEDED( read_one( fct, user))) {		// table, key
-			if( SQ_SUCCEEDED( read_one( fct, user))) {	// table, key, value
-				sq_set(v,-3);					// table
-				len--;
-				continue;
+		if( SQ_SUCCEEDED( sqt_serbin_read( fct, user))) {		// table, key
+			if( SQ_SUCCEEDED( sqt_serbin_read( fct, user))) {	// table, key, value
+				if( SQ_SUCCEEDED(sq_set(v,-3))) {				// table
+					len--;
+					continue;
+				}
 			}
-			pop();								// table
+			pop();												// table
 		}
-		pop();									//
+		pop();													//
 		return SQ_ERROR;
 	}
 	return SQ_OK;
+}
+
+
+SQRESULT sqt_serbin_write( HSQUIRRELVM v SQREADFUNC writefct, SQUserPointer user)
+{
+	
 }
