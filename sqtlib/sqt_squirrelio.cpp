@@ -59,7 +59,7 @@ static SQRESULT sqt_loadfile_srdr(HSQUIRRELVM v, SQT_SRDR srdr, const SQChar *fi
 			}
 		}
     }
-    return sq_throwerror(v,_SC("cannot mark"));
+    return sq_throwerror(v,_SC("cannot load the file"));
 }
 
 // file io
