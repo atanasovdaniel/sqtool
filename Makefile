@@ -43,6 +43,9 @@ $(eval $(call MAKE_LIBRARY,libsqstdstring.a))
 CXX_SOURCE_FILES+=./sqtlib/sqstdsystem.cpp
 $(eval $(call MAKE_LIBRARY,libsqstdsystem.a))
 
+$(eval $(call SOURCE_FOLDER,./serializers))
+$(eval $(call MAKE_LIBRARY,libser.a))
+
 CXX_SOURCE_FILES+=./sqtlib/sqstdio.cpp
 CXX_SOURCE_FILES+=./sqtlib/sqstdstream.cpp
 CXX_SOURCE_FILES+=./sqtlib/sqstdblob.cpp

@@ -22,13 +22,13 @@ static SQInteger sqt_SQLEXREADFUNC( SQUserPointer user)
 	return 0;
 }
 
-static SQInteger sqt_SQWRITEFUNC( SQUserPointer user, SQUserPointer buf, SQInteger size)
+SQInteger sqt_SQFILEWRITEFUNC( SQUserPointer user, SQUserPointer buf, SQInteger size)
 {
 	SQFILE s = (SQFILE)user;
     return sqstd_fwrite( buf, size, s);
 }
 
-static SQInteger sqt_SQREADFUNC( SQUserPointer user, SQUserPointer buf, SQInteger size)
+SQInteger sqt_SQFILEREADFUNC( SQUserPointer user, SQUserPointer buf, SQInteger size)
 {
 	SQFILE s = (SQFILE)user;
     SQInteger ret;
@@ -49,7 +49,7 @@ static SQRESULT sqt_loadfile_srdr(HSQUIRRELVM v, SQT_SRDR srdr, const SQChar *fi
 		}
 		sqtsrdr_reset( srdr);
 		if(us == SQ_BYTECODE_STREAM_TAG) { //BYTECODE
-			if(SQ_SUCCEEDED(sq_readclosure(v,sqt_SQREADFUNC,srdr))) {
+			if(SQ_SUCCEEDED(sq_readclosure(v,sqt_SQFILEREADFUNC,srdr))) {
 				return SQ_OK;
 			}
 		}
@@ -93,7 +93,7 @@ SQRESULT sqt_dofile(HSQUIRRELVM v, SQFILE file, const SQChar *filename,SQBool re
 
 SQRESULT sqt_writeclosure( HSQUIRRELVM v, SQFILE file)
 {
-    if(SQ_SUCCEEDED(sq_writeclosure(v,sqt_SQWRITEFUNC,file))) {
+    if(SQ_SUCCEEDED(sq_writeclosure(v,sqt_SQFILEWRITEFUNC,file))) {
         return SQ_OK;
     }
     return SQ_ERROR; //forward the error

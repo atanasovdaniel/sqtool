@@ -50,6 +50,8 @@ SQUIRREL_API SQRESULT sqstd_createfile(HSQUIRRELVM v, SQFILE file,SQBool own);
 SQUIRREL_API SQRESULT sqstd_getfile(HSQUIRRELVM v, SQInteger idx, SQFILE *file);
 
 //compiler helpers
+SQUIRREL_API SQInteger sqt_SQFILEWRITEFUNC( SQUserPointer user, SQUserPointer buf, SQInteger size);
+SQUIRREL_API SQInteger sqt_SQFILEREADFUNC( SQUserPointer user, SQUserPointer buf, SQInteger size);
 SQUIRREL_API SQRESULT sqt_loadfile(HSQUIRRELVM v, SQFILE file, const SQChar *filename, SQBool printerror);
 SQUIRREL_API SQRESULT sqt_dofile(HSQUIRRELVM v, SQFILE file, const SQChar *filename,SQBool retval,SQBool printerror);
 SQUIRREL_API SQRESULT sqt_writeclosure( HSQUIRRELVM v, SQFILE file);
