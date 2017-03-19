@@ -1,10 +1,20 @@
 /* see copyright notice in squirrel.h */
 /* see copyright notice in sqtool.h */
-#include <squirrel.h>
-#include <sqtool.h>
-#include <time.h>
+
+#ifdef _WIN32
+#include <direct.h>  
+#else // _WIN32
+#include <unistd.h>
+#include <string.h>
+#include <limits.h>
+#endif // _WIN32
+#include <errno.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <time.h>
+
+#include <squirrel.h>
+#include <sqtool.h>
 #include <sqstdsystem.h>
 
 
@@ -74,6 +84,66 @@ static SQInteger _system_system(HSQUIRRELVM v)
     return 1;
 }
 
+static SQInteger _system_getcwd(HSQUIRRELVM v)
+{
+#ifdef _WIN32
+	wchar_t *dest, *buff;
+	int len = _MAX_PATH;
+	buff = sq_malloc( len*sizeof(*buff));
+	do {
+		dest = _wgetcwd( buff, len);
+		if( dest || (errno != ERANGE))
+			break;
+		sq_realloc( buff, len*sizeof(*buff), (len+_MAX_PATH)*sizeof(*buff));
+		len += _MAX_PATH;
+	} while( len < 10000);	// some fallback to prevent infinite loop
+	if( dest) {
+		sqt_pushstring_wc(v, dest, -1);
+	}
+	else {
+		sq_pushnull(v);
+	}
+	sq_free( buff, len*sizeof(*buff));
+	return 1;
+#else // _WIN32
+	SQChar *dest;
+	size_t len = PATH_MAX;
+	do {
+		dest = sq_getscratchpad( v, len);
+		dest = getcwd( dest, len);
+		if( dest || (errno != ERANGE))
+			break;
+		len += PATH_MAX;
+	} while( len < 10000);	// some fallback to prevent infinite loop
+	if( dest) { 
+#ifdef __linux__
+		if( strncmp( dest, "(unreachable)", 13) == 0)
+			dest += 13;
+#endif // __linux__
+		sq_pushstring(v, dest, -1);
+		return 1;
+	}
+	sq_pushnull(v);
+	return 1;
+#endif // _WIN32
+}
+
+static SQInteger _system_chdir(HSQUIRRELVM v)
+{
+	SQInteger r;
+#ifdef _WIN32
+	wchar_t *path;
+	sqt_getstring_wc(v,2,&path);
+	r = _wchdir( path);
+#else // _WIN32
+	const SQChar *path;
+	sq_getstring(v,2,&path);
+	r = chdir( path);
+#endif // _WIN32
+	sq_pushinteger( v, r);
+	return 1;
+}
+
 static SQInteger _system_remove(HSQUIRRELVM v)
 {
 	int r;
@@ -112,7 +182,6 @@ static SQInteger _system_rename(HSQUIRRELVM v)
         return sq_throwerror(v,_SC("rename() failed"));
     return 0;
 }
-
 
 static SQInteger _system_clock(HSQUIRRELVM v)
 {
@@ -168,8 +237,6 @@ static SQInteger _system_date(HSQUIRRELVM v)
     return 1;
 }
 
-
-
 #define _DECL_FUNC(name,nparams,pmask) {_SC(#name),_system_##name,nparams,pmask}
 static const SQRegFunction systemlib_funcs[]={
     _DECL_FUNC(getenv,2,_SC(".s")),
@@ -180,21 +247,14 @@ static const SQRegFunction systemlib_funcs[]={
     _DECL_FUNC(date,-1,_SC(".nn")),
     _DECL_FUNC(remove,2,_SC(".s")),
     _DECL_FUNC(rename,3,_SC(".ss")),
+    _DECL_FUNC(getcwd,1,NULL),
+    _DECL_FUNC(chdir,2,_SC(".s")),
     {NULL,(SQFUNCTION)0,0,NULL}
 };
 #undef _DECL_FUNC
 
 SQInteger sqstd_register_systemlib(HSQUIRRELVM v)
 {
-    SQInteger i=0;
-    while(systemlib_funcs[i].name!=0)
-    {
-        sq_pushstring(v,systemlib_funcs[i].name,-1);
-        sq_newclosure(v,systemlib_funcs[i].f,0);
-        sq_setparamscheck(v,systemlib_funcs[i].nparamscheck,systemlib_funcs[i].typemask);
-        sq_setnativeclosurename(v,-1,systemlib_funcs[i].name);
-        sq_newslot(v,-3,SQFalse);
-        i++;
-    }
+	sqt_declarefunctions(v, systemlib_funcs);
     return 1;
 }
