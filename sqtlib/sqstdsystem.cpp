@@ -89,7 +89,7 @@ static SQInteger _system_getcwd(HSQUIRRELVM v)
 #ifdef _WIN32
 	wchar_t *dest, *buff;
 	int len = _MAX_PATH;
-	buff = sq_malloc( len*sizeof(*buff));
+	buff = (wchar_t*)sq_malloc( len*sizeof(*buff));
 	do {
 		dest = _wgetcwd( buff, len);
 		if( dest || (errno != ERANGE))
