@@ -5,7 +5,16 @@ see NOTES
 
 This project has successfully been compiled and run on
  * Windows x86 (gcc)
- * Linux x86
+ * Linux x86 (gcc)
+
+The SQUIRREL is included as git submodule in this repository, so don't forget to run one of:
+	git clone --recursive https://github.com/atanasovdaniel/sqtool.git
+or
+	git clone https://github.com/atanasovdaniel/sqtool.git
+	cd sqtool
+	git submodule update --init --recursive
+
+Unfortunately "Download ZIP" doesn't include the SQUIRREL. You can download it manually - tag v3.1 (or master).
 
 Autor: Daniel Atanasov
 e-mail: danielatanasov//gmail//com
