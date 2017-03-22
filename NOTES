@@ -8,7 +8,8 @@ The 'sqtlib' used in sqtool is different from SQUIRREL's 'sqstdlib', but is stil
 API changes:
 - SQFILE now represents SQStream class, not FILE*. So every class extending SQStream can be accessed by sqstd_xxx API: sqstd_fread, sqstd_fwrite, sqstd_fseek, sqstd_ftell, sqstd_fflush, sqstd_feof, sqstd_fclose
 	Two functions are with different parameters - more common API is used, only size to read/write is given instead of size and count: sqstd_fread and sqstd_fwrite.
-- Two more methods are added to SQStream to help generalization of stream: Close and _Release.
+    Functions sqstd_frelease() is added, it is used to delete stream object.
+- Two more methods are added to SQStream to help generalization of stream: Close and _Release. Method _Release is called by sqstd_frelease() and by stream release hooh.
 
 API added:
 - Three function are added to iteract with streams - sqt_loadfile, sqt_dofile and sqt_writeclosure.

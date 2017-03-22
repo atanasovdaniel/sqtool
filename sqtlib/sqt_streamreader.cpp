@@ -34,7 +34,7 @@ struct SQTStreamReader : public SQStream
 		return r;
     }
 	void _Release() {
-		//Close(); Can't close here
+		Close();
 		if( _mark_buff != NULL) {
 			sq_free( _mark_buff, _mark_len);
 		}
@@ -260,7 +260,7 @@ SQUIRREL_API SQRESULT sqstd_register_streamrdr(HSQUIRRELVM v)
 	sq_pushstring(v,_SC("_stream"),-1);					// root, class, name
 	sq_pushnull(v);										// root, class, name, value
 	sq_pushnull(v);										// root, class, name, value, attribute
-	sq_newmember(v,-4,SQFalse);							// root, class, [name, value, attribute] - bay be a bug
+	sq_newmember(v,-4,SQFalse);							// root, class, [name, value, attribute] - bay be a bug (name, value, attribute not poped)
 	sq_pop(v,3);										// root, class							 - workaround
 	sq_pushstring(v,_SC("_stream"),-1);					// root, class, name
 	sq_getmemberhandle(v,-2, &srdr__stream_handle);		// root, class

@@ -72,7 +72,7 @@ SQRESULT sqt_loadfile(HSQUIRRELVM v, SQFILE file, const SQChar *filename, SQBool
 	srdr = sqtsrdr_create( file, SQFalse);
 	if( srdr != NULL) {
 		r = sqt_loadfile_srdr( v, srdr, filename, printerror);
-		sqstd_fclose( (SQFILE)srdr);
+		sqstd_frelease( (SQFILE)srdr);
 		return r;
 	}
     return sq_throwerror(v,_SC("cannot create reader"));
@@ -107,7 +107,7 @@ SQRESULT sqstd_loadfile(HSQUIRRELVM v,const SQChar *filename,SQBool printerror)
     SQFILE file = sqstd_fopen(filename,_SC("rb"));
 	if( file) {
 		ret = sqt_loadfile( v, file, filename, printerror);
-		sqstd_fclose( file);
+		sqstd_frelease( file);
 		return ret;
 	}
     return sq_throwerror(v,_SC("cannot open the file"));
@@ -119,7 +119,7 @@ SQRESULT sqstd_dofile(HSQUIRRELVM v,const SQChar *filename, SQBool retval,SQBool
     SQFILE file = sqstd_fopen(filename,_SC("rb"));
 	if( file) {
 		ret = sqt_dofile( v, file, filename, retval, printerror);
-		sqstd_fclose( file);
+		sqstd_frelease( file);
 		return ret;
 	}
     return sq_throwerror(v,_SC("cannot open the file"));
@@ -130,10 +130,10 @@ SQRESULT sqstd_writeclosuretofile(HSQUIRRELVM v,const SQChar *filename)
     SQFILE file = sqstd_fopen(filename,_SC("wb+"));
     if(!file) return sq_throwerror(v,_SC("cannot open the file"));
     if(SQ_SUCCEEDED(sqt_writeclosure(v,file))) {
-        sqstd_fclose(file);
+        sqstd_frelease(file);
         return SQ_OK;
     }
-    sqstd_fclose(file);
+    sqstd_frelease(file);
     return SQ_ERROR; //forward the error
 }
 
