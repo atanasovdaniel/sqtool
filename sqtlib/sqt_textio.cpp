@@ -16,18 +16,76 @@ static unsigned char utf8_byte_masks[5] = {0,0,0x1f,0x0f,0x07};
 
 struct TextConverter
 {
-	virtual SQInteger BytesReadU8( uint8_t *pc) = 0;
-	virtual SQInteger BytesReadU16BE( uint16_t *pc) = 0;
-	virtual SQInteger BytesReadU16LE( uint16_t *pc) = 0;
+	virtual SQInteger BytesRead( uint8_t *p, SQInteger n) = 0;
 	virtual SQInteger BytesWrite( uint8_t *p, SQInteger n) = 0;
 	
 	SQInteger (*BytesReadChar)( uint32_t *pwc);
 	SQInteger (*BytesWriteChar)( uint32_t wc);
 
-	SQInteger isBigEndian = 0;
-	SQInteger BytesReadU16( uint16_t *pc) { if( !isBigEndian) return BytesReadU16LE(pc); else return BytesReadU16BE(pc); };
-	
 	uint32_t _bad_char = '?';
+
+	/* ================
+		Read
+	================ */
+
+	SQInteger BytesReadU8( uint8_t *pc)
+	{
+		return BytesRead( pc, 1);
+	}
+	
+	SQInteger BytesReadU16LE( uint16_t *pc)
+	{
+		if( BytesRead( pc, 2) == 2) {
+			*pc = (buf[1] << 8) | buf[0];
+			return SQ_OK;
+		}
+		return SQ_ERROR;
+	}
+	
+	SQInteger BytesReadU16BE( uint16_t *pc)
+	{
+		uint8_t buf[2];
+		if( BytesRead( buf, 2) == 2) {
+			*pc = (buf[0] << 8) | buf[1];
+			return SQ_OK;
+		}
+		return SQ_ERROR;
+	}
+
+	SQBool isRdBigEndian = SQTrue;	// Default is Big Endian
+	
+	SQInteger BytesReadU16( uint16_t *pc) { if( !isRdBigEndian) return BytesReadU16LE(pc); else return BytesReadU16BE(pc); };
+	
+	/* ================
+		Write
+	================ */
+
+	SQInteger BytesWriteU8( uint8_t c)
+	{
+		return BytesWrite( &c, 1);
+	}
+	
+	SQInteger BytesWriteU16LE( uint16_t c)
+	{
+		uint8_t buf[2] = { (uint8_t)c, (uint8_t)(c>>8) };
+		if( BytesWrite( buf, 2) == 2) {
+			return SQ_OK;
+		}
+		return SQ_ERROR;
+	}
+	
+	SQInteger BytesWriteU16BE( uint16_t c)
+	{
+		uint8_t buf[2] = { (uint8_t)(c>>8), (uint8_t)c };
+		if( BytesWrite( buf, 2) == 2) {
+			return SQ_OK;
+		}
+		return SQ_ERROR;
+	}
+
+	SQBool isWrBigEndian = SQTrue;	// Default is Big Endian
+	
+	SQInteger BytesWriteU16( uint16_t c) { if( !isWrBigEndian) return BytesWriteU16LE(c); else return BytesWriteU16BE(c); };
 	
 	/* ================
 		Raw
@@ -36,7 +94,7 @@ struct TextConverter
 	SQInteger Read_RAW( uint32_t *pwc)
 	{
 		uint8_t c;
-		if( BytesReadU8( &c) != 0) return -1;		// EOF (SQCCV_TOOFEW)
+		if( SQ_FAILED(BytesReadU8( &c))) return -1;		// EOF (SQCCV_TOOFEW)
 		*pwc = c;
 		return SQ_OK;
 	}
@@ -44,7 +102,25 @@ struct TextConverter
 	SQInteger Write_RAW( uint32_t wc)
 	{
 		uint8_t c = (uint8_t)wc;
-		return BytesWrite( &c, 1);
+		return BytesWriteU8( c);
+	}
+	
+	/* ================
+		ASCII
+	================ */
+	
+	SQInteger Read_ASCII( uint32_t *pwc)
+	{
+		uint8_t c;
+		if( BytesReadU8( &c) != 0) return -1;		// EOF (SQCCV_TOOFEW)
+		*pwc = (c <= 0x7F) ? c : _bad_char;
+		return SQ_OK;
+	}
+	
+	SQInteger Write_ASCII( uint32_t wc)
+	{
+		uint8_t c = (wc <= 0x7F) ? (uint8_t)wc : (uint8_t)_bad_char;
+		return BytesWriteU8( c);
 	}
 	
 	/* ================
@@ -61,8 +137,8 @@ struct TextConverter
 			SQInteger codelen = utf8_lengths[ c >> 4];
 			uint32_t wc = c & utf8_byte_masks[codelen];
 			while( --codelen) {
-				if( BytesReadU8( &c) != 0) return _bad_char;		// EOF (SQCCV_TOOFEW)
-				if( (c & 0xC0) != 0x80) return _bad_char;	// SQCCV_ILSEQ
+				if( BytesReadU8( &c) != 0) { *pwc = _bad_char; return -1; }		// EOF (SQCCV_TOOFEW)
+				if( (c & 0xC0) != 0x80) { *pwc = _bad_char; return 1; }	// SQCCV_ILSEQ
 				wc <<= 6; wc |= c & 0x3F;
 			}
 			*pwc = wc;
@@ -90,7 +166,7 @@ struct TextConverter
 			}
 			return BytesWrite( r, codelen);
 		}
-		return 1;	// SQCCV_ILUNI
+		return Write_UTF16(_bad_char);	// SQCCV_ILUNI
 	}
 	
 	/* ================
@@ -99,21 +175,23 @@ struct TextConverter
 
 	SQInteger Read_UTF16( uint32_t *pwc)
 	{
-		uint16_t c;
-		if( BytesReadU16( &c) != 0) return -1;	// EOF (SQCCV_TOOFEW)
-		if( c == 0xFEFF)		{ /* ok */ }					// !!!!
-		else if( c == 0xFFFE)  { isBigEndian = !isBigEndian; }	// !!!!
-		else if( c >= 0xD800 && c < 0xDC00) {
-			uint32_t wc = c;
-			if( BytesReadU16( &c) != 0) return _bad_char;	// EOF (SQCCV_TOOFEW)
-			if( c >= 0xDC00 && c < 0xE000) {
-				wc = 0x10000 + (((uint32_t)wc - 0xD800) << 10) + (c - 0xDC00);
-				return wc;
+		while(1) {
+			uint16_t c;
+			if( BytesReadU16( &c) != 0) return -1;	// EOF (SQCCV_TOOFEW)
+			if( c == 0xFEFF)		{ /* ok */ }
+			else if( c == 0xFFFE)  { isRdBigEndian = !isRdBigEndian; }
+			else if( c >= 0xD800 && c < 0xDC00) {
+				uint32_t wc = c;
+				if( BytesReadU16( &c) != 0) return _bad_char;	// EOF (SQCCV_TOOFEW)
+				if( c >= 0xDC00 && c < 0xE000) {
+					wc = 0x10000 + ((wc - 0xD800) << 10) + (c - 0xDC00);
+					return wc;
+				}
+				else return _bad_char;	// SQCCV_ILSEQ
 			}
-			else return _bad_char;	// SQCCV_ILSEQ
+			else if( c >= 0xDC00 && c < 0xE000) { *pwc = _bad_char; return 1; }		// SQCCV_ILSEQ
+			else { *pwc = c; return SQ_OK; }
 		}
-		else if( c >= 0xDC00 && c < 0xE000) { *pwc = _bad_char; return 1; }		// SQCCV_ILSEQ
-		else { *pwc = c; return SQ_OK; }
 	}
 
 	SQInteger Write_UTF16( uint32_t wc)
@@ -122,28 +200,21 @@ struct TextConverter
 			// check and write BOM
 			if( wc >= 0x10000) {
 				uint16_t w1, w2;
-				uint8_t r[4];
 
 				wc -= 0x10000;
 				w2 = 0xDC00 | (wc & 0x03FF);
 				w1 = 0xD800 | ((wc >> 10) & 0x03FF);
-
-				r[0] = (unsigned char) (w1 >> 8);
-				r[1] = (unsigned char) w1;
-				r[2] = (unsigned char) (w2 >> 8);
-				r[3] = (unsigned char) w2;
-
-				return BytesWrite( r, 4);
+				
+				if( BytesWriteU16( w1) == 0)
+					if( BytesWriteU16( w2) == 0)
+						return SQ_OK;
+				return SQ_ERROR;
 			}
 			else if( wc < 0x10000 && n >= 2) {
-				uint8_t r[2];
-				r[0] = (unsigned char) (wc >> 8);
-				r[1] = (unsigned char) wc;
-
-				return BytesWrite( r, 4);
+				return BytesWriteU16( (uint16_t)wc);
 			}
 		}
-		else return 1; // SQCCV_ILUNI;
+		else return Write_UTF16(_bad_char); // SQCCV_ILUNI;
 	}
 
 };
@@ -155,37 +226,18 @@ struct SQTTextReader : public TextConverter
 	SQTTextReader( SQStream *stream, sqBool owns) { _stream = stream; _owns = owns };
 	SQTTextReader( SQStream *stream, const SQString *encoding, SQBool guess, sqBool owns) { _stream = stream };
 	
-	SQInteger BytesReadU8( uint8_t *pc)
+	SQInteger BytesRead( uint8_t *p, SQInteger n)
 	{
-		if( _stream->Read( pc, 1) == 1)
+		if( _stream->Read( pc, n) == n)
 			return SQ_OK;
-		return SQ_ERROR;
-	}
-	
-	SQInteger BytesReadU16LE( uint16_t *pc)
-	{
-		if( _stream->Read( pc, 2) == 2)
-			return SQ_OK;
-		return SQ_ERROR;
-	}
-	
-	SQInteger BytesReadU16BE( uint16_t *pc)
-	{
-		uint8_t buf[2];
-		if( _stream->Read( buf, 2) == 2) {
-			*pc = (buf[0] << 8) | buf[1];
-			return SQ_OK;
-		}
 		return SQ_ERROR;
 	}
 	
 	SQInteger BytesWrite( uint8_t *p, SQInteger n)
 	{
 		if( (_cbuf_len + n) > CBUFF_SIZE) return SQ_ERROR;
-		while( n) {
-			_cbuf[_cbuf_len++] = *p++;
-			n--;
-		}
+		memcpy( _cbuf + _cbuf_len, p, n);
+		_cbuf_len += n;
 		return SQ_OK;
 	}
 	
