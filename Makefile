@@ -47,6 +47,7 @@ CXX_SOURCE_FILES+=./sqtlib/sqstdio.cpp
 CXX_SOURCE_FILES+=./sqtlib/sqstdstream.cpp
 CXX_SOURCE_FILES+=./sqtlib/sqstdblob.cpp
 CXX_SOURCE_FILES+=./sqtlib/sqt_streamreader.cpp
+CXX_SOURCE_FILES+=./sqtlib/sqt_textio.cpp
 CXX_SOURCE_FILES+=./sqtlib/sqt_squirrelio.cpp
 $(eval $(call MAKE_LIBRARY,libsqstdio.a))
 
