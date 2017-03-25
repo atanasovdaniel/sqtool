@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <stddef.h>
+#include <string.h>
 
 #include <squirrel.h>
 #include <sqtool.h>
@@ -8,23 +9,6 @@
 
 #define SQTC_ILSEQ	(1)
 #define SQTC_ILUNI	(2)
-
-static int compare_encoding_name( const SQChar *iname, const SQChar *oname)
-{
-	SQChar i, o;
-	while( ((i = *iname)!=_SC('\0')) & ((o = *oname)!=_SC('\0'))) {
-		if( !(i==o) && !(i>=_SC('A') && (i^o)==0x20)
-		  && !( i==_SC('-') && o==_SC('_')) ) {
-			if( i==_SC('-'))
-				iname++;
-			else
-				break;
-		}
-		else { iname++; oname++; }
-	}
-
-	return i-o;
-}
 
 static const uint8_t utf8_lengths[16] =
 {
@@ -37,13 +21,28 @@ static const uint8_t utf8_lengths[16] =
 
 static unsigned char utf8_byte_masks[5] = {0,0,0x1f,0x0f,0x07};
 
+struct TextConverter;
+
+typedef struct encodings_list_tag
+{
+	const SQChar *name;
+	SQInteger (TextConverter::*Read)( uint32_t *pwc);
+	SQInteger (TextConverter::*Write)( uint32_t wc);
+
+} encodings_list_t;
+
+static const encodings_list_tag *find_encoding( const SQChar *name);
+	
 struct TextConverter
 {
 	virtual SQInteger BytesRead( uint8_t *p, SQInteger n) = 0;
 	virtual SQInteger BytesWrite( uint8_t *p, SQInteger n) = 0;
 	
-	SQInteger (TextConverter::*BytesReadChar)( uint32_t *pwc);
-	SQInteger (TextConverter::*BytesWriteChar)( uint32_t wc);
+	SQInteger (TextConverter::*_BytesReadChar)( uint32_t *pwc);
+	SQInteger (TextConverter::*_BytesWriteChar)( uint32_t wc);
+
+	SQInteger BytesReadChar( uint32_t *pwc) { return (this->*_BytesReadChar)( pwc); }
+	SQInteger BytesWriteChar( uint32_t wc) { return (this->*_BytesWriteChar)( wc); }
 
 	uint32_t _bad_char = '?';
 
@@ -112,21 +111,28 @@ struct TextConverter
 	SQInteger BytesWriteU16( uint16_t c) { if( !isWrBigEndian) return BytesWriteU16LE(c); else return BytesWriteU16BE(c); };
 	
 	/* ================
-		Raw
+		NULL
 	================ */
 	
-	SQInteger Read_RAW( uint32_t *pwc)
+	SQInteger Read_NULL( uint32_t *pwc) { return SQ_ERROR; }
+	SQInteger Write_NULL( uint32_t wc) { return SQ_ERROR; }
+	
+	/* ================
+		"" - char
+	================ */
+	
+	SQInteger Read_CHAR( uint32_t *pwc)
 	{
-		uint8_t c;
-		if( SQ_FAILED(BytesReadU8( &c))) return SQ_ERROR;		// EOF (SQCCV_TOOFEW)
+		SQChar c;
+		if( BytesRead( (uint8_t*)&c, sizeof(SQChar)) != sizeof(SQChar)) return SQ_ERROR;
 		*pwc = c;
 		return SQ_OK;
 	}
 	
-	SQInteger Write_RAW( uint32_t wc)
+	SQInteger Write_CHAR( uint32_t wc)
 	{
-		uint8_t c = (uint8_t)wc;
-		return BytesWriteU8( c);
+		SQChar c = (SQChar)wc;
+		return (BytesWrite( (uint8_t*)&c, sizeof(SQChar)) == sizeof(SQChar)) ? SQ_OK : SQ_ERROR;
 	}
 	
 	/* ================
@@ -243,77 +249,100 @@ struct TextConverter
 		return SQTC_ILUNI;
 	}
 
-	/* ====================================
-			conversions
-	==================================== */
-
-	typedef struct encodings_list_tag
-	{
-		const SQChar *name;
-		SQInteger (TextConverter::*Read)( uint32_t *pwc);
-		SQInteger (TextConverter::*Write)( uint32_t wc);
-
-	} encodings_list_t;
-	static constexpr encodings_list_t encodings_list[4] = {
-		{ _SC("ASCII"),		&TextConverter::Read_ASCII, &TextConverter::Write_ASCII },
-		{ _SC("UTF-8"),		&TextConverter::Read_UTF8,  &TextConverter::Write_UTF8  },
-		{ _SC("UTF-16"),	&TextConverter::Read_UTF16, &TextConverter::Write_UTF16 },
-		{ NULL, NULL, NULL }
-	};
-
-	static const encodings_list_tag *find_encoding( const SQChar *name)
-	{
-		const encodings_list_t *enc = encodings_list;
-
-		while( enc->name) {
-			if( compare_encoding_name( enc->name, name) == 0) break;
-			enc++;
-		}
-
-		return enc->name ? enc : NULL;
-	}
-
 	SQInteger SetReadEncoding( const SQChar *name)
 	{
 		const encodings_list_tag *enc = find_encoding( name);
 		if( enc != NULL) {
-			BytesReadChar = enc->Read;
+			_BytesReadChar = enc->Read;
 			return SQ_OK;
 		}
+		_BytesReadChar = &TextConverter::Read_NULL;
 		return SQ_ERROR;
 	}
-	
+
 	SQInteger SetWriteEncoding( const SQChar *name)
 	{
 		const encodings_list_tag *enc = find_encoding( name);
 		if( enc != NULL) {
-			BytesWriteChar = enc->Write;
+			_BytesWriteChar = enc->Write;
 			return SQ_OK;
 		}
+		_BytesWriteChar = &TextConverter::Write_NULL;
 		return SQ_ERROR;
 	}
 };
-/*
-#define CBUFF_SIZE	8
+
+/* ====================================
+		conversions
+==================================== */
+
+static encodings_list_t encodings_list[] = {
+	{ _SC(""),			&TextConverter::Read_CHAR, &TextConverter::Write_CHAR },
+	{ _SC("ASCII"),		&TextConverter::Read_ASCII, &TextConverter::Write_ASCII },
+	{ _SC("UTF-8"),		&TextConverter::Read_UTF8,  &TextConverter::Write_UTF8  },
+	{ _SC("UTF-16"),	&TextConverter::Read_UTF16, &TextConverter::Write_UTF16 },
+	{ NULL, NULL, NULL }
+};
+
+static int compare_encoding_name( const SQChar *iname, const SQChar *oname)
+{
+	SQChar i, o;
+	while( ((i = *iname)!=_SC('\0')) && ((o = *oname)!=_SC('\0'))) {
+		if( !(i==o) && !(i>=_SC('A') && (i^o)==0x20)
+		  && !( i==_SC('-') && o==_SC('_')) ) {
+			if( i==_SC('-'))
+				iname++;
+			else
+				break;
+		}
+		else { iname++; oname++; }
+	}
+
+	return i-o;
+}
+
+static const encodings_list_tag *find_encoding( const SQChar *name)
+{
+	const encodings_list_t *enc = encodings_list;
+
+	while( enc->name) {
+		if( compare_encoding_name( enc->name, name) == 0) break;
+		enc++;
+	}
+
+	return enc->name ? enc : NULL;
+}
+
+#define CBUFF_SIZE	16
 
 struct SQTTextReader : public TextConverter
 {
-	SQTTextReader( SQStream *stream, sqBool owns) { _stream = stream; _owns = owns };
-	SQTTextReader( SQStream *stream, const SQString *encoding, SQBool guess, sqBool owns) { _stream = stream };
+	SQTTextReader( SQStream *stream, SQBool owns)
+	{
+		_stream = stream;
+		_owns = owns;
+		_BytesReadChar = &TextConverter::Read_UTF8;
+#ifdef SQUNICODE
+		_BytesWriteChar = &TextConverter::Write_UTF16;
+#else // SQUNICODE
+		_BytesWriteChar = &TextConverter::Write_UTF8;
+#endif // SQUNICODE
+	};
 	
 	SQInteger BytesRead( uint8_t *p, SQInteger n)
 	{
-		if( _stream->Read( pc, n) == n)
-			return SQ_OK;
-		return SQ_ERROR;
+		return _stream->Read( p, n);
+		//if( _stream->Read( p, n) == n)
+		//	return SQ_OK;
+		//return SQ_ERROR;
 	}
 	
 	SQInteger BytesWrite( uint8_t *p, SQInteger n)
 	{
-		if( (_cbuf_len + n) > CBUFF_SIZE) return SQ_ERROR;
+		if( (_cbuf_len + n) > CBUFF_SIZE) n = CBUFF_SIZE - _cbuf_len;
 		memcpy( _cbuf + _cbuf_len, p, n);
 		_cbuf_len += n;
-		return SQ_OK;
+		return n;
 	}
 	
 	SQInteger ReadChar( SQChar *pc)
@@ -326,9 +355,15 @@ struct SQTTextReader : public TextConverter
 				BytesWriteChar( wc);
 			}
 		}
-		if( _cbuf_pos == _cbuf_len) return SQ_ERROR;
-		*pc = _cbuff[_cbuf_pos++];
+		if( (_cbuf_pos + (SQInteger)sizeof(SQChar)) < _cbuf_len) return SQ_ERROR;
+		*pc = *(SQChar*)(_cbuf + _cbuf_pos);
+		_cbuf_pos += sizeof(SQChar);
 		return SQ_OK;
+	}
+	
+	SQInteger SetEncoding( const SQChar *enc, SQBool guess)
+	{
+		return SQ_ERROR;
 	}
 	
 	void Close() {
@@ -336,14 +371,14 @@ struct SQTTextReader : public TextConverter
 			_stream->Close();
 		}
 		_stream = NULL;
-		_owns = SQFlase;
+		_owns = SQFalse;
 	}
 	
 	SQStream *_stream;
 	SQBool _owns;
 	
-	SQChar _cbuff[CBUFF_SIZE];
+	uint8_t _cbuf[CBUFF_SIZE];
 	SQInteger _cbuf_pos;
 	SQInteger _cbuf_len;
 };
-*/
+
