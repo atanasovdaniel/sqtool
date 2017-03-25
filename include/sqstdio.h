@@ -42,6 +42,7 @@ SQUIRREL_API SQInteger sqstd_ftell(SQFILE);
 SQUIRREL_API SQInteger sqstd_fflush(SQFILE);
 SQUIRREL_API SQInteger sqstd_feof(SQFILE);
 SQUIRREL_API SQInteger sqstd_fclose(SQFILE);
+SQUIRREL_API void sqstd_frelease(SQFILE);
 
 SQUIRREL_API SQInteger __sqstd_stream_releasehook(SQUserPointer p, SQInteger SQ_UNUSED_ARG(size));
 

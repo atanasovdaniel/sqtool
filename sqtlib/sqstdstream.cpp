@@ -53,13 +53,18 @@ SQInteger sqstd_fclose(SQFILE file)
 {
 	SQStream *self = (SQStream *)file;
 	SQInteger r = self->Close();
-	self->_Release();
 	return r;
+}
+
+void sqstd_frelease(SQFILE file)
+{
+	SQStream *self = (SQStream *)file;
+	self->_Release();
 }
 
 SQInteger __sqstd_stream_releasehook(SQUserPointer p, SQInteger SQ_UNUSED_ARG(size))
 {
-	sqstd_fclose( (SQFILE)p);
+	sqstd_frelease( (SQFILE)p);
     return 1;
 }
 
