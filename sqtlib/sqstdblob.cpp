@@ -124,6 +124,12 @@ static SQInteger _blob__typeof(HSQUIRRELVM v)
 //     return 1;
 // }
 
+SQFILE sqstd_blob(SQInteger size)
+{
+    SQBlob *b = new (sq_malloc(sizeof(SQBlob)))SQBlob(size);
+	return (SQFILE)b;
+}
+
 static SQInteger _blob_constructor(HSQUIRRELVM v)
 {
     SQInteger nparam = sq_gettop(v);

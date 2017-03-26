@@ -10,6 +10,9 @@
 #define SQTC_ILSEQ	(1)
 #define SQTC_ILUNI	(2)
 
+typedef SQInteger (*SQTCReadFct)( SQUserPointer user, uint8_t *p, SQInteger n);
+typedef SQInteger (*SQTCWriteFct)( SQUserPointer user, const uint8_t *p, SQInteger n);
+
 static const uint8_t utf8_lengths[16] =
 {
 	1,1,1,1,1,1,1,1,        /* 0000 to 0111 : 1 byte (plain ASCII) */
@@ -32,19 +35,32 @@ typedef struct encodings_list_tag
 } encodings_list_t;
 
 static const encodings_list_tag *find_encoding( const SQChar *name);
-	
+
 struct TextConverter
 {
-	virtual SQInteger BytesRead( uint8_t *p, SQInteger n) = 0;
-	virtual SQInteger BytesWrite( uint8_t *p, SQInteger n) = 0;
+	TextConverter( SQTCReadFct read, SQTCWriteFct write, SQUserPointer user) {
+		BytesRead = read;
+		BytesWrite = write;
+		_BytesUser = user;
+		_BytesReadChar = &TextConverter::Read_UTF8;
+#ifdef SQUNICODE
+		_BytesWriteChar = &TextConverter::Write_UTF16;
+#else // SQUNICODE
+		_BytesWriteChar = &TextConverter::Write_UTF8;
+#endif // SQUNICODE
+	}
 	
+	SQTCReadFct BytesRead;
+	SQTCWriteFct BytesWrite;
+	SQUserPointer _BytesUser;
+	
+	uint32_t _bad_char = '?';
+
 	SQInteger (TextConverter::*_BytesReadChar)( uint32_t *pwc);
 	SQInteger (TextConverter::*_BytesWriteChar)( uint32_t wc);
 
-	SQInteger BytesReadChar( uint32_t *pwc) { return (this->*_BytesReadChar)( pwc); }
-	SQInteger BytesWriteChar( uint32_t wc) { return (this->*_BytesWriteChar)( wc); }
-
-	uint32_t _bad_char = '?';
+	SQInteger ReadChar( uint32_t *pwc) { return (this->*_BytesReadChar)( pwc); }
+	SQInteger WriteChar( uint32_t wc) { return (this->*_BytesWriteChar)( wc); }
 
 	/* ================
 		Read
@@ -52,13 +68,13 @@ struct TextConverter
 
 	SQInteger BytesReadU8( uint8_t *pc)
 	{
-		return (BytesRead( pc, 1) == 1) ? SQ_OK : SQ_ERROR;
+		return (BytesRead( _BytesUser, pc, 1) == 1) ? SQ_OK : SQ_ERROR;
 	}
 	
 	SQInteger BytesReadU16LE( uint16_t *pc)
 	{
 		uint8_t buf[2];
-		if( BytesRead( buf, 2) == 2) {
+		if( BytesRead( _BytesUser, buf, 2) == 2) {
 			*pc = (buf[1] << 8) | buf[0];
 			return SQ_OK;
 		}
@@ -68,7 +84,7 @@ struct TextConverter
 	SQInteger BytesReadU16BE( uint16_t *pc)
 	{
 		uint8_t buf[2];
-		if( BytesRead( buf, 2) == 2) {
+		if( BytesRead( _BytesUser, buf, 2) == 2) {
 			*pc = (buf[0] << 8) | buf[1];
 			return SQ_OK;
 		}
@@ -85,13 +101,13 @@ struct TextConverter
 
 	SQInteger BytesWriteU8( uint8_t c)
 	{
-		return (BytesWrite( &c, 1) == 1) ? SQ_OK : SQ_ERROR;;
+		return (BytesWrite( _BytesUser, &c, 1) == 1) ? SQ_OK : SQ_ERROR;;
 	}
 	
 	SQInteger BytesWriteU16LE( uint16_t c)
 	{
 		uint8_t buf[2] = { (uint8_t)c, (uint8_t)(c>>8) };
-		if( BytesWrite( buf, 2) == 2) {
+		if( BytesWrite( _BytesUser, buf, 2) == 2) {
 			return SQ_OK;
 		}
 		return SQ_ERROR;
@@ -100,7 +116,7 @@ struct TextConverter
 	SQInteger BytesWriteU16BE( uint16_t c)
 	{
 		uint8_t buf[2] = { (uint8_t)(c>>8), (uint8_t)c };
-		if( BytesWrite( buf, 2) == 2) {
+		if( BytesWrite( _BytesUser, buf, 2) == 2) {
 			return SQ_OK;
 		}
 		return SQ_ERROR;
@@ -111,20 +127,13 @@ struct TextConverter
 	SQInteger BytesWriteU16( uint16_t c) { if( !isWrBigEndian) return BytesWriteU16LE(c); else return BytesWriteU16BE(c); };
 	
 	/* ================
-		NULL
-	================ */
-	
-	SQInteger Read_NULL( uint32_t *pwc) { return SQ_ERROR; }
-	SQInteger Write_NULL( uint32_t wc) { return SQ_ERROR; }
-	
-	/* ================
-		"" - char
+		"" - native char
 	================ */
 	
 	SQInteger Read_CHAR( uint32_t *pwc)
 	{
 		SQChar c;
-		if( BytesRead( (uint8_t*)&c, sizeof(SQChar)) != sizeof(SQChar)) return SQ_ERROR;
+		if( BytesRead( _BytesUser, (uint8_t*)&c, sizeof(SQChar)) != sizeof(SQChar)) return SQ_ERROR;
 		*pwc = c;
 		return SQ_OK;
 	}
@@ -132,7 +141,7 @@ struct TextConverter
 	SQInteger Write_CHAR( uint32_t wc)
 	{
 		SQChar c = (SQChar)wc;
-		return (BytesWrite( (uint8_t*)&c, sizeof(SQChar)) == sizeof(SQChar)) ? SQ_OK : SQ_ERROR;
+		return (BytesWrite( _BytesUser, (uint8_t*)&c, sizeof(SQChar)) == sizeof(SQChar)) ? SQ_OK : SQ_ERROR;
 	}
 	
 	/* ================
@@ -181,7 +190,7 @@ struct TextConverter
 		if( wc < 0xD800 || (wc >= 0xE000 && wc != 0xFFFE && wc < 0x110000)) {
 			SQInteger codelen;
 
-			if( wc <= 0x007F)			{ uint8_t c = (uint8_t)wc; return BytesWrite( &c, 1); }
+			if( wc <= 0x007F)			{ uint8_t c = (uint8_t)wc; return BytesWrite( _BytesUser, &c, 1); }
 			else if( wc <= 0x07FF)		{ codelen = 2; }
 			else if( wc <= 0xFFFFL)		{ codelen = 3; }
 			else						{ codelen = 4; }
@@ -194,7 +203,7 @@ struct TextConverter
 				case 2: r[1] = 0x80 | (wc & 0x3f); wc = wc >> 6; wc |= 0xc0;
 				case 1: r[0] = wc;
 			}
-			return BytesWrite( r, codelen);
+			return BytesWrite( _BytesUser, r, codelen);
 		}
 		Write_UTF8(_bad_char);	// SQCCV_ILUNI
 		return SQTC_ILUNI;
@@ -256,7 +265,7 @@ struct TextConverter
 			_BytesReadChar = enc->Read;
 			return SQ_OK;
 		}
-		_BytesReadChar = &TextConverter::Read_NULL;
+		//_BytesReadChar = &TextConverter::Read_NULL;
 		return SQ_ERROR;
 	}
 
@@ -267,13 +276,13 @@ struct TextConverter
 			_BytesWriteChar = enc->Write;
 			return SQ_OK;
 		}
-		_BytesWriteChar = &TextConverter::Write_NULL;
+		//_BytesWriteChar = &TextConverter::Write_NULL;
 		return SQ_ERROR;
 	}
 };
 
 /* ====================================
-		conversions
+		conversion names
 ==================================== */
 
 static encodings_list_t encodings_list[] = {
@@ -312,6 +321,146 @@ static const encodings_list_tag *find_encoding( const SQChar *name)
 
 	return enc->name ? enc : NULL;
 }
+
+/* ====================================
+		Reader
+==================================== */
+
+#define CBUFF_SIZE	16
+
+static SQInteger SQTextReaderRead( SQUserPointer user, uint8_t *p, SQInteger n);
+static SQInteger SQTextReaderWrite( SQUserPointer user, const uint8_t *p, SQInteger n);
+
+struct SQTextReader : public SQStream
+{
+	SQTextReader( SQStream *stream, SQBool owns) : _converter(SQTextReaderRead,SQTextReaderWrite,this) {
+		_stream = stream;
+		_owns = owns;
+//		_last_writen = -1;
+//		_blob = (SQStream*)sqstd_blob(0);
+		_buf_len = 0;
+		_buf_pos = 0;
+	}
+
+//	~SQTextReader() {
+//		if( _blob) {
+//			_blob->_Release();
+//		}
+//	}
+
+	SQInteger Read( void *buffer, SQInteger size) {
+		SQInteger preread = 0;
+		if( _buf_pos > 0) {								// have something left in _buf
+			SQInteger left = _buf_len - _buf_pos;
+			SQInteger toread = left;
+			if( toread > size)
+				toread = size;
+			memcpy( buffer, _buf + _buf_pos, toread);
+			if( left == toread)							// buffer is empty now
+				_buf_pos = 0;
+			else
+				_buf_pos += toread;
+			if( toread == size)							// no more to read
+				return size;
+			preread = toread;
+			size -= toread;
+			buffer = (uint8_t*)buffer + toread;
+		}												// nothing in _buf
+		while( size > 0) {
+			uint32_t wc;
+			_buf_len = 0;
+			if( SQ_FAILED(_converter.ReadChar( &wc))) return preread;
+			if( SQ_FAILED(_converter.WriteChar( wc))) return preread;
+			SQInteger toread = _buf_len;
+			if( toread < size) {
+				toread = size;
+				_buf_pos = size;
+			}
+			memcpy( buffer, _buf, toread);
+			preread += toread;
+			size -= toread;
+			buffer = (uint8_t*)buffer + toread;
+		}
+		return preread;
+	}
+
+	SQInteger cnvWrite( const uint8_t *p, SQInteger n)
+	{
+		if( (_buf_len + n) > CBUFF_SIZE) n = CBUFF_SIZE - _buf_len;
+		memcpy( _buf + _buf_len, p, n);
+		_buf_len += n;
+		return n;
+	}
+	
+	SQInteger _buf_len;
+	SQInteger _buf_pos;
+	uint8_t _buf[CBUFF_SIZE];
+/*
+	SQInteger Read( void *buffer, SQInteger size) {
+		SQInteger preread = 0;
+		if( _last_writen != -1) {
+			SQInteger left = _last_writen - _blob->Tell();
+			SQInteger toread = left;
+			if( toread > size)
+				toread = size;
+			_blob->Read( buffer, toread);
+			if( left == toread) {
+				_blob->Seek(0,SQ_SEEK_SET);
+				_last_writen = -1;
+			}
+			if( toread == size)
+				return size;
+			preread = toread;
+			size -= toread;
+			buffer = (uint8_t*)buffer + toread;
+		}
+		SQInteger pos;
+		while( size < (pos = _blob->Tell())) {
+			uint32_t wc;
+			_converter.ReadChar( &wc);
+			_converter.WriteChar( wc);
+		}
+		if( pos > size)
+			_last_writen = pos;
+		_blob->Seek(0,SQ_SEEK_SET);
+		_blod->Read( buffer, size);
+		return preread + size;
+	}
+
+	SQInteger cnvWrite( const uint8_t *p, SQInteger n)
+	{
+		return _blob->Write( p, n);
+	}
+	SQStream *_blob;
+	SQInteger _last_writen;
+	
+*/
+	SQInteger cnvRead( uint8_t *p, SQInteger n)
+	{
+		return _stream->Read( p, n);
+	}
+	
+protected:
+	SQStream *_stream;
+	SQBool _owns;
+	TextConverter _converter;
+};
+
+SQInteger SQTextReaderRead( SQUserPointer user, uint8_t *p, SQInteger n)
+{
+	SQTextReader *rdr = (SQTextReader*)user;
+	return rdr->cnvRead( p, n);
+}
+
+SQInteger SQTextReaderWrite( SQUserPointer user, const uint8_t *p, SQInteger n)
+{
+	SQTextReader *rdr = (SQTextReader*)user;
+	return rdr->cnvWrite( p, n);
+}
+
+/* ====================================
+		conversions
+==================================== */
 
 /*
 #define CBUFF_SIZE	16
@@ -383,8 +532,3 @@ struct SQTTextReader : public TextConverter
 	SQInteger _cbuf_len;
 };
 */
-
-struct SQTTextReader : public TextConverter
-{
-};
-
