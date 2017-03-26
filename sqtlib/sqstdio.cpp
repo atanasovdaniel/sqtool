@@ -13,7 +13,6 @@
 struct SQFile : public SQStream {
     SQFile() { _handle = NULL; _owns = false;}
     SQFile( FILE *file, bool owns) { _handle = file; _owns = owns;}
-//    virtual ~SQFile() { Close(); }
 	
     bool Open(const SQChar *filename ,const SQChar *mode) {
         Close();
@@ -42,7 +41,6 @@ struct SQFile : public SQStream {
 		return r;
     }
 	void _Release() {
-		Close();
 		this->~SQFile();
 		sq_free(this,sizeof(SQFile));
 	}
@@ -137,7 +135,6 @@ struct SQFPipe : public SQFile {
     }
 	
 	void _Release() {
-		Close();
 		this->~SQFPipe();
 		sq_free(this,sizeof(SQFPipe));
 	}

@@ -33,11 +33,16 @@ struct SQTStreamReader : public SQStream
         _owns = false;
 		return r;
     }
-	void _Release() {
-		Close();
+
+	~SQTStreamReader()
+	{
 		if( _mark_buff != NULL) {
 			sq_free( _mark_buff, _mark_len);
+			_mark_buff = NULL;
 		}
+	}
+
+	void _Release() {
 		this->~SQTStreamReader();
 		sq_free(this,sizeof(SQTStreamReader));
 	}

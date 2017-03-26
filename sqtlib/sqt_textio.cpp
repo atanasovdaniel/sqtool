@@ -313,6 +313,7 @@ static const encodings_list_tag *find_encoding( const SQChar *name)
 	return enc->name ? enc : NULL;
 }
 
+/*
 #define CBUFF_SIZE	16
 
 struct SQTTextReader : public TextConverter
@@ -380,5 +381,10 @@ struct SQTTextReader : public TextConverter
 	uint8_t _cbuf[CBUFF_SIZE];
 	SQInteger _cbuf_pos;
 	SQInteger _cbuf_len;
+};
+*/
+
+struct SQTTextReader : public TextConverter
+{
 };
 
