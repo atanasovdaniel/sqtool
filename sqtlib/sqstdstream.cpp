@@ -59,6 +59,7 @@ SQInteger sqstd_fclose(SQFILE file)
 void sqstd_frelease(SQFILE file)
 {
 	SQStream *self = (SQStream *)file;
+	self->Close();
 	self->_Release();
 }
 

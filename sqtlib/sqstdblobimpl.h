@@ -13,11 +13,13 @@ struct SQBlob : public SQStream
         _ptr = 0;
         _owns = true;
     }
-//    virtual ~SQBlob() {
-//        sq_free(_buf, _allocated);
-//    }
+    ~SQBlob() {
+		if( _buf != NULL) {
+			sq_free(_buf, _allocated);
+			_buf = NULL;
+		}
+    }
 	void _Release() {
-        sq_free(_buf, _allocated);
 		this->~SQBlob();
 		sq_free(this,sizeof(SQBlob));
 	}
