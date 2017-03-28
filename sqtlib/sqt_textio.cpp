@@ -2,6 +2,7 @@
 #include <stddef.h>
 #include <string.h>
 
+#include <new>
 #include <squirrel.h>
 #include <sqtool.h>
 #include <sqstdio.h>
@@ -12,6 +13,8 @@
 
 typedef SQInteger (*SQTCReadFct)( SQUserPointer user, uint8_t *p, SQInteger n);
 typedef SQInteger (*SQTCWriteFct)( SQUserPointer user, const uint8_t *p, SQInteger n);
+
+static HSQMEMBERHANDLE rdr__stream_handle;
 
 static const uint8_t utf8_lengths[16] =
 {
@@ -45,11 +48,11 @@ struct TextConverter
 		_BytesReadChar = &TextConverter::Read_UTF8;
 		_BytesWriteChar = &TextConverter::Write_UTF8;
 	}
-	
+
 	SQTCReadFct BytesRead;
 	SQTCWriteFct BytesWrite;
 	SQUserPointer _BytesUser;
-	
+
 	uint32_t _bad_char = '?';
 
 	SQInteger (TextConverter::*_BytesReadChar)( uint32_t *pwc);
@@ -66,7 +69,7 @@ struct TextConverter
 	{
 		return (BytesRead( _BytesUser, pc, 1) == 1) ? SQ_OK : SQ_ERROR;
 	}
-	
+
 	SQInteger BytesReadU16LE( uint16_t *pc)
 	{
 		uint8_t buf[2];
@@ -76,7 +79,7 @@ struct TextConverter
 		}
 		return SQ_ERROR;
 	}
-	
+
 	SQInteger BytesReadU16BE( uint16_t *pc)
 	{
 		uint8_t buf[2];
@@ -88,9 +91,9 @@ struct TextConverter
 	}
 
 	SQBool isRdBigEndian = SQTrue;	// Default is Big Endian
-	
+
 	SQInteger BytesReadU16( uint16_t *pc) { if( !isRdBigEndian) return BytesReadU16LE(pc); else return BytesReadU16BE(pc); };
-	
+
 	/* ================
 		Write
 	================ */
@@ -99,7 +102,7 @@ struct TextConverter
 	{
 		return (BytesWrite( _BytesUser, &c, 1) == 1) ? SQ_OK : SQ_ERROR;;
 	}
-	
+
 	SQInteger BytesWriteU16LE( uint16_t c)
 	{
 		uint8_t buf[2] = { (uint8_t)c, (uint8_t)(c>>8) };
@@ -108,7 +111,7 @@ struct TextConverter
 		}
 		return SQ_ERROR;
 	}
-	
+
 	SQInteger BytesWriteU16BE( uint16_t c)
 	{
 		uint8_t buf[2] = { (uint8_t)(c>>8), (uint8_t)c };
@@ -119,13 +122,13 @@ struct TextConverter
 	}
 
 	SQBool isWrBigEndian = SQTrue;	// Default is Big Endian
-	
+
 	SQInteger BytesWriteU16( uint16_t c) { if( !isWrBigEndian) return BytesWriteU16LE(c); else return BytesWriteU16BE(c); };
-	
+
 	/* ================
 		"" - native char
 	================ */
-	
+
 	SQInteger Read_CHAR( uint32_t *pwc)
 	{
 		SQChar c;
@@ -133,17 +136,17 @@ struct TextConverter
 		*pwc = c;
 		return SQ_OK;
 	}
-	
+
 	SQInteger Write_CHAR( uint32_t wc)
 	{
 		SQChar c = (SQChar)wc;
 		return (BytesWrite( _BytesUser, (uint8_t*)&c, sizeof(SQChar)) == sizeof(SQChar)) ? SQ_OK : SQ_ERROR;
 	}
-	
+
 	/* ================
 		ASCII
 	================ */
-	
+
 	SQInteger Read_ASCII( uint32_t *pwc)
 	{
 		uint8_t c;
@@ -151,13 +154,13 @@ struct TextConverter
 		*pwc = (c <= 0x7F) ? c : _bad_char;
 		return SQ_OK;
 	}
-	
+
 	SQInteger Write_ASCII( uint32_t wc)
 	{
 		uint8_t c = (wc <= 0x7F) ? (uint8_t)wc : (uint8_t)_bad_char;
 		return BytesWriteU8( c);
 	}
-	
+
 	/* ================
 		UTF-8
 	================ */
@@ -190,7 +193,7 @@ struct TextConverter
 			else if( wc <= 0x07FF)		{ codelen = 2; }
 			else if( wc <= 0xFFFFL)		{ codelen = 3; }
 			else						{ codelen = 4; }
-		
+
 			uint8_t r[4];
 			switch( codelen)
 			{ /* note: code falls through cases! */
@@ -204,7 +207,7 @@ struct TextConverter
 		Write_UTF8(_bad_char);	// SQCCV_ILUNI
 		return SQTC_ILUNI;
 	}
-	
+
 	/* ================
 		UTF-16
 	================ */
@@ -240,7 +243,7 @@ struct TextConverter
 				wc -= 0x10000;
 				w2 = 0xDC00 | (wc & 0x03FF);
 				w1 = 0xD800 | ((wc >> 10) & 0x03FF);
-				
+
 				if( SQ_SUCCEEDED(BytesWriteU16( w1)))
 					if( SQ_SUCCEEDED(BytesWriteU16( w2)))
 						return SQ_OK;
@@ -360,7 +363,7 @@ struct SQTextReader : public SQStream
 			if( SQ_FAILED(_converter.ReadChar( &wc))) return preread;
 			if( SQ_FAILED(_converter.WriteChar( wc))) return preread;
 			SQInteger toread = _buf_len;
-			if( toread < size) {
+			if( toread > size) {
 				toread = size;
 				_buf_pos = size;
 			}
@@ -384,7 +387,31 @@ struct SQTextReader : public SQStream
 	{
 		return _stream->Read( p, n);
 	}
-	
+
+    SQInteger Write(void *buffer, SQInteger size) { return -1; }
+    SQInteger Flush() { return -1; }
+    SQInteger Tell() { return -1; }
+    SQInteger Len() { return -1; }
+    SQInteger Seek(SQInteger offset, SQInteger origin) { return -1; }
+    bool IsValid() { return (_stream != NULL) && _stream->IsValid(); }
+    bool EOS() { return (_stream == NULL) || _stream->EOS(); }
+    SQInteger Close()
+	{
+		SQInteger r = 0;
+		if( (_stream != NULL) && _owns) {
+			r = _stream->Close();
+			_stream = NULL;
+			_owns = SQFalse;
+		}
+		return r;
+	}
+
+    void _Release()
+	{
+		this->~SQTextReader();
+		sq_free(this,sizeof(SQTextReader));
+	}
+
 protected:
 	TextConverter _converter;
 	SQStream *_stream;
@@ -406,10 +433,68 @@ SQInteger SQTextReaderWrite( SQUserPointer user, const uint8_t *p, SQInteger n)
 	return rdr->cnvWrite( p, n);
 }
 
+// ------------------------------------
+// TextReader Bindings
+
+static SQInteger _textreader__typeof(HSQUIRRELVM v)
+{
+    sq_pushstring(v,std_textreader_decl.name,-1);
+    return 1;
+}
+
+static SQInteger _textreader_constructor(HSQUIRRELVM v)
+{
+	SQInteger top = sq_gettop(v);
+	SQStream *stream;
+	const SQChar *encoding = _SC("");
+	SQBool owns = SQFalse;
+
+    if( SQ_FAILED( sq_getinstanceup( v,2,(SQUserPointer*)&stream,(SQUserPointer)SQSTD_STREAM_TYPE_TAG))) {
+        return sq_throwerror(v,_SC("invalid argument type"));
+	}
+
+	if( top > 2) {
+		sq_getbool(v, 3, &owns);
+		if( top > 3) {
+	        sq_getstring(v, 4, &encoding);
+		}
+	}
+
+	SQTextReader *rdr = new (sq_malloc(sizeof(SQTextReader)))SQTextReader( stream, owns);
+
+    if(SQ_FAILED(sq_setinstanceup(v,1,rdr))) {
+		rdr->_Release();
+        return sq_throwerror(v, _SC("cannot create textreader instance"));
+    }
+
+	// save stream in _stream member
+	sq_push(v,2);
+	sq_setbyhandle(v,1,&rdr__stream_handle);
+
+    sq_setreleasehook(v,1,__sqstd_stream_releasehook);
+    return 0;
+}
+
+//bindings
+#define _DECL_TEXTREADER_FUNC(name,nparams,typecheck) {_SC(#name),_textreader_##name,nparams,typecheck}
+static const SQRegFunction _textreader_methods[] = {
+    _DECL_TEXTREADER_FUNC(constructor,-2,_SC("xxbs")),
+    _DECL_TEXTREADER_FUNC(_typeof,1,_SC("x")),
+    {NULL,(SQFUNCTION)0,0,NULL}
+};
+
+const SQTClassDecl std_textreader_decl = {
+	&std_stream_decl,	// base_class
+    _SC("std_textreader"),	// reg_name
+    _SC("textreader"),		// name
+	_textreader_methods,	// methods
+	NULL,				// globals
+};
+
 /* ====================================
 		Text Writer
 ==================================== */
-
+/*
 static SQInteger SQTextWriterRead( SQUserPointer user, uint8_t *p, SQInteger n);
 static SQInteger SQTextWriterWrite( SQUserPointer user, const uint8_t *p, SQInteger n);
 
@@ -423,14 +508,14 @@ struct SQTextWriter : public SQStream
     SQInteger Write(void *buffer, SQInteger size) {
 		_in_buf = (uint8_t*)buffer;
 		_in_size = size;
-		
+
 		while( _in_size > 0)
 		{
 			uint32_t wc;
 			if( SQ_FAILED(_converter.ReadChar( &wc))) return preread;
 			if( SQ_FAILED(_converter.WriteChar( wc))) return preread;
 		}
-		
+
 		if( (size - _in_size) < CBUFF_SIZE) {
 			memcpy( _tmp_buf, _in_buf, _in_size);
 			_tmp_len = _in_size;
@@ -458,16 +543,16 @@ struct SQTextWriter : public SQStream
 		}
 		if( n <= _in_size) {
 			memcpy( p, _in_buf, n);
-			return total + 
+			return total +
 		}
 		return SQ_ERROR;
 	}
-	
+
 	SQInteger cnvWrite( const uint8_t *p, SQInteger n)
 	{
 		return _stream->Write( p, n);
 	}
-	
+
 protected:
 	TextConverter _converter;
 	SQStream *_stream;
@@ -485,4 +570,25 @@ SQInteger SQTextWriterWrite( SQUserPointer user, const uint8_t *p, SQInteger n)
 	SQTextWriter *wrt = (SQTextWriter*)user;
 	return wrt->cnvWrite( p, n);
 }
+*/
+/* ====================================
+		Register
+==================================== */
 
+SQUIRREL_API SQRESULT sqstd_register_textreader(HSQUIRRELVM v)
+{
+	if(SQ_FAILED(sqt_declareclass(v,&std_textreader_decl)))
+	{
+		return SQ_ERROR;
+	}
+	//sq_newmember(...)
+	sq_pushstring(v,_SC("_stream"),-1);					// root, class, name
+	sq_pushnull(v);										// root, class, name, value
+	sq_pushnull(v);										// root, class, name, value, attribute
+	sq_newmember(v,-4,SQFalse);							// root, class, [name, value, attribute] - bay be a bug (name, value, attribute not poped)
+	sq_pop(v,3);										// root, class							 - workaround
+	sq_pushstring(v,_SC("_stream"),-1);					// root, class, name
+	sq_getmemberhandle(v,-2, &rdr__stream_handle);		// root, class
+	sq_poptop(v);										// root
+	return SQ_OK;
+}

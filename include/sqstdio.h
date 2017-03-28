@@ -27,6 +27,8 @@ extern SQUIRREL_API_VAR const SQTClassDecl std_file_decl;
 #define SQSTD_FILE_TYPE_TAG ((SQUserPointer)&std_file_decl)
 extern SQUIRREL_API_VAR const SQTClassDecl std_popen_decl;
 #define SQSTD_POPEN_TYPE_TAG ((SQUserPointer)&std_popen_decl)
+extern SQUIRREL_API_VAR const SQTClassDecl std_textreader_decl;
+#define SQSTD_TEXTREADER_TYPE_TAG ((SQUserPointer)&std_textreader_decl)
 
 #define SQ_SEEK_CUR 0
 #define SQ_SEEK_END 1
@@ -62,6 +64,7 @@ SQUIRREL_API SQRESULT sqstd_writeclosuretofile(HSQUIRRELVM v,const SQChar *filen
 
 SQUIRREL_API SQRESULT sqstd_register_iolib(HSQUIRRELVM v);
 SQUIRREL_API SQRESULT sqstd_register_squirrelio(HSQUIRRELVM v);
+SQUIRREL_API SQRESULT sqstd_register_textreader(HSQUIRRELVM v);
 
 #ifdef __cplusplus
 } /*extern "C"*/
