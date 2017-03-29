@@ -31,9 +31,10 @@ struct TextConverter;
 
 typedef struct encodings_list_tag
 {
-	const SQChar *name;
+	const SQChar **names;
 	SQInteger (TextConverter::*Read)( uint32_t *pwc);
 	SQInteger (TextConverter::*Write)( uint32_t wc);
+	SQBool isBig;
 
 } encodings_list_t;
 
@@ -262,6 +263,7 @@ struct TextConverter
 		const encodings_list_tag *enc = find_encoding( name);
 		if( enc != NULL) {
 			_BytesReadChar = enc->Read;
+			isRdBigEndian = enc->isBig;
 			return SQ_OK;
 		}
 		//_BytesReadChar = &TextConverter::Read_NULL;
@@ -273,6 +275,7 @@ struct TextConverter
 		const encodings_list_tag *enc = find_encoding( name);
 		if( enc != NULL) {
 			_BytesWriteChar = enc->Write;
+			isWrBigEndian = enc->isBig;
 			return SQ_OK;
 		}
 		//_BytesWriteChar = &TextConverter::Write_NULL;
@@ -284,18 +287,25 @@ struct TextConverter
 		conversion names
 ==================================== */
 
+static const SQChar *__NAMES_CHAR[] = { _SC(""), NULL };
+static const SQChar *__NAMES_ASCII[] = { _SC("ASCII"), NULL };
+static const SQChar *__NAMES_UTF_8[] = { _SC("UTF-8"), NULL };
+static const SQChar *__NAMES_UTF_16BE[] = { _SC("UTF-16"), _SC("UTF-16BE"), _SC("UCS-2BE"), NULL };
+static const SQChar *__NAMES_UTF_16LE[] = { _SC("UTF-16LE"), _SC("UCS-2"), _SC("UCS-2LE"), NULL };
+
 static encodings_list_t encodings_list[] = {
-	{ _SC(""),			&TextConverter::Read_CHAR, &TextConverter::Write_CHAR },
-	{ _SC("ASCII"),		&TextConverter::Read_ASCII, &TextConverter::Write_ASCII },
-	{ _SC("UTF-8"),		&TextConverter::Read_UTF8,  &TextConverter::Write_UTF8  },
-	{ _SC("UTF-16"),	&TextConverter::Read_UTF16, &TextConverter::Write_UTF16 },
-	{ NULL, NULL, NULL }
+	{ __NAMES_CHAR,		&TextConverter::Read_CHAR, &TextConverter::Write_CHAR, SQFalse },
+	{ __NAMES_ASCII,	&TextConverter::Read_ASCII, &TextConverter::Write_ASCII, SQFalse },
+	{ __NAMES_UTF_8,	&TextConverter::Read_UTF8,  &TextConverter::Write_UTF8, SQFalse },
+	{ __NAMES_UTF_16BE,	&TextConverter::Read_UTF16, &TextConverter::Write_UTF16, SQTrue },
+	{ __NAMES_UTF_16LE,	&TextConverter::Read_UTF16, &TextConverter::Write_UTF16, SQFalse },
+	{ NULL, NULL, NULL, SQFalse }
 };
 
 static int compare_encoding_name( const SQChar *iname, const SQChar *oname)
 {
 	SQChar i, o;
-	while( ((i = *iname)!=_SC('\0')) && ((o = *oname)!=_SC('\0'))) {
+	while( ((i = *iname)!=_SC('\0')) & ((o = *oname)!=_SC('\0'))) {		// both i and o must be read
 		if( !(i==o) && !(i>=_SC('A') && (i^o)==0x20)
 		  && !( i==_SC('-') && o==_SC('_')) ) {
 			if( i==_SC('-'))
@@ -313,12 +323,17 @@ static const encodings_list_tag *find_encoding( const SQChar *name)
 {
 	const encodings_list_t *enc = encodings_list;
 
-	while( enc->name) {
-		if( compare_encoding_name( enc->name, name) == 0) break;
+	while( enc->names) {
+		const SQChar **pname = enc->names;
+		while( *pname) {
+			if( compare_encoding_name( name, *pname) == 0) {
+				return enc;
+			}
+			pname++;
+		}
 		enc++;
 	}
-
-	return enc->name ? enc : NULL;
+	return NULL;
 }
 
 /* ====================================
@@ -337,6 +352,11 @@ struct SQTextReader : public SQStream
 		_owns = owns;
 		_buf_len = 0;
 		_buf_pos = 0;
+#ifdef SQUNICODE
+		_converter.SetWriteEncoding(_SC("UTF-16"));
+#else // SQUNICODE
+		_converter.SetWriteEncoding(_SC("UTF-8"));
+#endif // SQUNICODE
 	}
 
 	SQInteger Read( void *buffer, SQInteger size) {
@@ -386,6 +406,11 @@ struct SQTextReader : public SQStream
 	SQInteger cnvRead( uint8_t *p, SQInteger n)
 	{
 		return _stream->Read( p, n);
+	}
+
+	SQInteger SetEncoding( const SQChar *encoding, SQBool guess)
+	{
+		return _converter.SetReadEncoding( encoding);
 	}
 
     SQInteger Write(void *buffer, SQInteger size) { return -1; }
@@ -446,7 +471,6 @@ static SQInteger _textreader_constructor(HSQUIRRELVM v)
 {
 	SQInteger top = sq_gettop(v);
 	SQStream *stream;
-	const SQChar *encoding = _SC("");
 	SQBool owns = SQFalse;
 
     if( SQ_FAILED( sq_getinstanceup( v,2,(SQUserPointer*)&stream,(SQUserPointer)SQSTD_STREAM_TYPE_TAG))) {
@@ -455,12 +479,22 @@ static SQInteger _textreader_constructor(HSQUIRRELVM v)
 
 	if( top > 2) {
 		sq_getbool(v, 3, &owns);
-		if( top > 3) {
-	        sq_getstring(v, 4, &encoding);
-		}
 	}
 
 	SQTextReader *rdr = new (sq_malloc(sizeof(SQTextReader)))SQTextReader( stream, owns);
+
+	if( top > 3) {
+		const SQChar *encoding;
+		SQBool guess = SQFalse;
+        sq_getstring(v, 4, &encoding);
+		if( top > 4) {
+			sq_getbool(v, 4, &guess);
+		}
+		if( SQ_FAILED(rdr->SetEncoding( encoding, guess))) {
+			rdr->_Release();
+			return sq_throwerror(v, _SC("cannot create textreader instance"));
+		}
+	}
 
     if(SQ_FAILED(sq_setinstanceup(v,1,rdr))) {
 		rdr->_Release();
@@ -478,7 +512,7 @@ static SQInteger _textreader_constructor(HSQUIRRELVM v)
 //bindings
 #define _DECL_TEXTREADER_FUNC(name,nparams,typecheck) {_SC(#name),_textreader_##name,nparams,typecheck}
 static const SQRegFunction _textreader_methods[] = {
-    _DECL_TEXTREADER_FUNC(constructor,-2,_SC("xxbs")),
+    _DECL_TEXTREADER_FUNC(constructor,-2,_SC("xxbsb")),
     _DECL_TEXTREADER_FUNC(_typeof,1,_SC("x")),
     {NULL,(SQFUNCTION)0,0,NULL}
 };
