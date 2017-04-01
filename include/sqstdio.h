@@ -29,6 +29,8 @@ extern SQUIRREL_API_VAR const SQTClassDecl std_popen_decl;
 #define SQSTD_POPEN_TYPE_TAG ((SQUserPointer)&std_popen_decl)
 extern SQUIRREL_API_VAR const SQTClassDecl std_textreader_decl;
 #define SQSTD_TEXTREADER_TYPE_TAG ((SQUserPointer)&std_textreader_decl)
+extern SQUIRREL_API_VAR const SQTClassDecl std_textwriter_decl;
+#define SQSTD_TEXTWRITER_TYPE_TAG ((SQUserPointer)&std_textwriter_decl)
 
 #define SQ_SEEK_CUR 0
 #define SQ_SEEK_END 1

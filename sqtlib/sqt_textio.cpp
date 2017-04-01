@@ -8,6 +8,7 @@
 #include <sqstdio.h>
 #include <sqtstreamreader.h>
 
+#define SQTC_TOOFEW	(-2)
 #define SQTC_ILSEQ	(1)
 #define SQTC_ILUNI	(2)
 
@@ -15,6 +16,7 @@ typedef SQInteger (*SQTCReadFct)( SQUserPointer user, uint8_t *p, SQInteger n);
 typedef SQInteger (*SQTCWriteFct)( SQUserPointer user, const uint8_t *p, SQInteger n);
 
 static HSQMEMBERHANDLE rdr__stream_handle;
+static HSQMEMBERHANDLE wrt__stream_handle;
 
 static const uint8_t utf8_lengths[16] =
 {
@@ -176,7 +178,7 @@ struct TextConverter
 			SQInteger codelen = utf8_lengths[ c >> 4];
 			uint32_t wc = c & utf8_byte_masks[codelen];
 			while( --codelen) {
-				if( SQ_FAILED(BytesReadU8( &c))) { return SQ_ERROR; }		// EOF (SQCCV_TOOFEW)
+				if( SQ_FAILED(BytesReadU8( &c))) { return SQTC_TOOFEW; }		// EOF (SQCCV_TOOFEW)
 				if( (c & 0xC0) != 0x80) { *pwc = _bad_char; return SQTC_ILSEQ; }	// SQCCV_ILSEQ
 				wc <<= 6; wc |= c & 0x3F;
 			}
@@ -217,17 +219,17 @@ struct TextConverter
 	{
 		while(1) {
 			uint16_t c;
-			if( SQ_FAILED(BytesReadU16( &c))) return SQ_ERROR;	// EOF (SQCCV_TOOFEW)
+			if( SQ_FAILED(BytesReadU16( &c))) return SQTC_TOOFEW;	// EOF (SQCCV_TOOFEW)
 			if( c == 0xFEFF)		{ /* ok */ }
 			else if( c == 0xFFFE)  { isRdBigEndian = !isRdBigEndian; }
 			else if( c >= 0xD800 && c < 0xDC00) {
 				uint32_t wc = c;
-				if( SQ_FAILED(BytesReadU16( &c))) return SQ_ERROR;	// EOF (SQCCV_TOOFEW)
+				if( SQ_FAILED(BytesReadU16( &c))) return SQTC_TOOFEW;	// EOF (SQCCV_TOOFEW)
 				if( c >= 0xDC00 && c < 0xE000) {
 					wc = 0x10000 + ((wc - 0xD800) << 10) + (c - 0xDC00);
 					return wc;
 				}
-				else return _bad_char;	// SQCCV_ILSEQ
+				else { *pwc = _bad_char; return SQTC_ILSEQ;	} // SQCCV_ILSEQ
 			}
 			else if( c >= 0xDC00 && c < 0xE000) { *pwc = _bad_char; return SQTC_ILSEQ; }		// SQCCV_ILSEQ
 			else { *pwc = c; return SQ_OK; }
@@ -257,6 +259,10 @@ struct TextConverter
 		Write_UTF16(_bad_char); // SQCCV_ILUNI;
 		return SQTC_ILUNI;
 	}
+
+	/* ================
+		Set encoding
+	================ */
 
 	SQInteger SetReadEncoding( const SQChar *name)
 	{
@@ -414,7 +420,7 @@ struct SQTextReader : public SQStream
 	}
 
     SQInteger Write(void *buffer, SQInteger size) { return -1; }
-    SQInteger Flush() { return -1; }
+    SQInteger Flush() { return 0; }
     SQInteger Tell() { return -1; }
     SQInteger Len() { return -1; }
     SQInteger Seek(SQInteger offset, SQInteger origin) { return -1; }
@@ -492,7 +498,7 @@ static SQInteger _textreader_constructor(HSQUIRRELVM v)
 		}
 		if( SQ_FAILED(rdr->SetEncoding( encoding, guess))) {
 			rdr->_Release();
-			return sq_throwerror(v, _SC("cannot create textreader instance"));
+			return sq_throwerror(v, _SC("cannot set encoding"));
 		}
 	}
 
@@ -528,69 +534,145 @@ const SQTClassDecl std_textreader_decl = {
 /* ====================================
 		Text Writer
 ==================================== */
-/*
+
 static SQInteger SQTextWriterRead( SQUserPointer user, uint8_t *p, SQInteger n);
 static SQInteger SQTextWriterWrite( SQUserPointer user, const uint8_t *p, SQInteger n);
 
 struct SQTextWriter : public SQStream
 {
-	SQTextReader( SQStream *stream, SQBool owns) : _converter(SQTextWriterRead,SQTextWriterWrite,this) {
+	SQTextWriter( SQStream *stream, SQBool owns) : _converter(SQTextWriterRead,SQTextWriterWrite,this) {
 		_stream = stream;
 		_owns = owns;
+		_tmp_size = 0;
+		_tmp_pos = 0;
+#ifdef SQUNICODE
+		_converter.SetReadEncoding(_SC("UTF-16"));
+#else // SQUNICODE
+		_converter.SetReadEncoding(_SC("UTF-8"));
+#endif // SQUNICODE
 	}
 
     SQInteger Write(void *buffer, SQInteger size) {
+		SQInteger total = 0;
 		_in_buf = (uint8_t*)buffer;
 		_in_size = size;
-
-		while( _in_size > 0)
-		{
+		_in_pos = 0;
+		if( _tmp_size > 0) {
+			while( _in_pos < _in_size) {
+				SQInteger r;
+				uint32_t wc;
+				_tmp_buf[_tmp_size] = _in_buf[_in_pos];
+				_in_pos++;
+				_tmp_size++;
+				_tmp_pos = 0;
+				r = _converter.ReadChar( &wc);
+				if( SQ_SUCCEEDED(r)) {
+					_tmp_size = 0;
+					if( SQ_FAILED(_converter.WriteChar( wc))) return _in_pos;
+					break;
+				}
+				else if( r != SQTC_TOOFEW) {
+					_tmp_size = 0;
+					return _in_pos;
+				}
+			}
+			total = _in_pos;
+		}
+		while( _in_pos < _in_size) {
+			SQInteger r;
+			SQInteger saved_pos = _in_pos;
 			uint32_t wc;
-			if( SQ_FAILED(_converter.ReadChar( &wc))) return preread;
-			if( SQ_FAILED(_converter.WriteChar( wc))) return preread;
+			r = _converter.ReadChar( &wc);
+			if( SQ_FAILED(r)) {
+				if( r == SQTC_TOOFEW) {
+					_tmp_size = _in_size - saved_pos;
+					memcpy( _tmp_buf, _in_buf + saved_pos, _tmp_size);
+					total += _tmp_size;
+				}
+				return total;
+			}
+			if( SQ_FAILED(_converter.WriteChar( wc))) return total;
+			total += _in_pos - saved_pos;
 		}
-
-		if( (size - _in_size) < CBUFF_SIZE) {
-			memcpy( _tmp_buf, _in_buf, _in_size);
-			_tmp_len = _in_size;
-			return size;
-		}
-		return size - _in_size;
+		return total;
 	}
 
 	SQInteger cnvRead( uint8_t *p, SQInteger n)
 	{
-		SQInteger total = 0;
-		if( _tmp_len > 0) {
-			if( n <= _tmp_len) {
-				memcpy( p, _tmp_buf, n);
-				_tmp_len -= n;
-				return n;
+		if( _tmp_size > 0) {
+			SQInteger bleft = _tmp_size - _tmp_pos;
+			if( bleft > n) {
+				bleft = n;
 			}
-			else {
-				memcpy( p, _tmp_buf, _tmp_len);
-				n -= _tmp_len;
-				p += _tmp_len;
-				total = _tmp_len;
-				_tmp_len = 0;
+			memcpy( p, _tmp_buf + _tmp_pos, bleft);
+			_tmp_pos += bleft;
+			return bleft;
+		}
+		else {
+			SQInteger bleft = _in_size - _in_pos;
+			if( bleft > n) {
+				bleft = n;
 			}
+			memcpy( p, _in_buf + _in_pos, bleft);
+			_in_pos += bleft;
+			return bleft;
 		}
-		if( n <= _in_size) {
-			memcpy( p, _in_buf, n);
-			return total +
-		}
-		return SQ_ERROR;
 	}
 
 	SQInteger cnvWrite( const uint8_t *p, SQInteger n)
 	{
-		return _stream->Write( p, n);
+		return _stream->Write( (void*)p, n);
+	}
+
+	SQInteger SetEncoding( const SQChar *encoding, SQBool guess)
+	{
+		return _converter.SetWriteEncoding( encoding);
+	}
+
+	SQInteger Read( void *buffer, SQInteger size) { return -1; }
+    SQInteger Flush()
+	{
+		if( _stream != NULL) _stream->Flush();
+		return 0;
+	}
+    SQInteger Tell() { return -1; }
+    SQInteger Len() { return -1; }
+    SQInteger Seek(SQInteger offset, SQInteger origin) { return -1; }
+    bool IsValid() { return (_stream != NULL) && _stream->IsValid(); }
+    bool EOS() { return SQFalse; }
+    SQInteger Close()
+	{
+		SQInteger r = 0;
+		if( (_stream != NULL) && (_tmp_size > 0)) {
+			uint32_t wc = _converter._bad_char;
+			_converter.WriteChar( wc);
+			_tmp_size = 0;
+		}
+		Flush();
+		if( (_stream != NULL) && _owns) {
+			r = _stream->Close();
+			_stream = NULL;
+			_owns = SQFalse;
+		}
+		return r;
+	}
+
+    void _Release()
+	{
+		this->~SQTextWriter();
+		sq_free(this,sizeof(SQTextWriter));
 	}
 
 protected:
 	TextConverter _converter;
 	SQStream *_stream;
 	SQBool _owns;
+	uint8_t* _in_buf;
+	SQInteger _in_size;
+	SQInteger _in_pos;
+	SQInteger _tmp_size;
+	SQInteger _tmp_pos;
+	uint8_t _tmp_buf[CBUFF_SIZE];
 };
 
 SQInteger SQTextWriterRead( SQUserPointer user, uint8_t *p, SQInteger n)
@@ -604,7 +686,74 @@ SQInteger SQTextWriterWrite( SQUserPointer user, const uint8_t *p, SQInteger n)
 	SQTextWriter *wrt = (SQTextWriter*)user;
 	return wrt->cnvWrite( p, n);
 }
-*/
+
+// ------------------------------------
+// TextWriter Bindings
+
+static SQInteger _textwriter__typeof(HSQUIRRELVM v)
+{
+    sq_pushstring(v,std_textwriter_decl.name,-1);
+    return 1;
+}
+
+static SQInteger _textwriter_constructor(HSQUIRRELVM v)
+{
+	SQInteger top = sq_gettop(v);
+	SQStream *stream;
+	SQBool owns = SQFalse;
+
+    if( SQ_FAILED( sq_getinstanceup( v,2,(SQUserPointer*)&stream,(SQUserPointer)SQSTD_STREAM_TYPE_TAG))) {
+        return sq_throwerror(v,_SC("invalid argument type"));
+	}
+
+	if( top > 2) {
+		sq_getbool(v, 3, &owns);
+	}
+
+	SQTextWriter *wrt = new (sq_malloc(sizeof(SQTextWriter)))SQTextWriter( stream, owns);
+
+	if( top > 3) {
+		const SQChar *encoding;
+		SQBool guess = SQFalse;
+        sq_getstring(v, 4, &encoding);
+		if( top > 4) {
+			sq_getbool(v, 4, &guess);
+		}
+		if( SQ_FAILED(wrt->SetEncoding( encoding, guess))) {
+			wrt->_Release();
+			return sq_throwerror(v, _SC("cannot set encoding"));
+		}
+	}
+
+    if(SQ_FAILED(sq_setinstanceup(v,1,wrt))) {
+		wrt->_Release();
+        return sq_throwerror(v, _SC("cannot create textwriter instance"));
+    }
+
+	// save stream in _stream member
+	sq_push(v,2);
+	sq_setbyhandle(v,1,&wrt__stream_handle);
+
+    sq_setreleasehook(v,1,__sqstd_stream_releasehook);
+    return 0;
+}
+
+//bindings
+#define _DECL_TEXTWRITER_FUNC(name,nparams,typecheck) {_SC(#name),_textwriter_##name,nparams,typecheck}
+static const SQRegFunction _textwriter_methods[] = {
+    _DECL_TEXTWRITER_FUNC(constructor,-2,_SC("xxbsb")),
+    _DECL_TEXTWRITER_FUNC(_typeof,1,_SC("x")),
+    {NULL,(SQFUNCTION)0,0,NULL}
+};
+
+const SQTClassDecl std_textwriter_decl = {
+	&std_stream_decl,	// base_class
+    _SC("std_textwriter"),	// reg_name
+    _SC("textwriter"),		// name
+	_textwriter_methods,	// methods
+	NULL,				// globals
+};
+
 /* ====================================
 		Register
 ==================================== */
@@ -624,5 +773,20 @@ SQUIRREL_API SQRESULT sqstd_register_textreader(HSQUIRRELVM v)
 	sq_pushstring(v,_SC("_stream"),-1);					// root, class, name
 	sq_getmemberhandle(v,-2, &rdr__stream_handle);		// root, class
 	sq_poptop(v);										// root
+
+	if(SQ_FAILED(sqt_declareclass(v,&std_textwriter_decl)))
+	{
+		return SQ_ERROR;
+	}
+	//sq_newmember(...)
+	sq_pushstring(v,_SC("_stream"),-1);					// root, class, name
+	sq_pushnull(v);										// root, class, name, value
+	sq_pushnull(v);										// root, class, name, value, attribute
+	sq_newmember(v,-4,SQFalse);							// root, class, [name, value, attribute] - bay be a bug (name, value, attribute not poped)
+	sq_pop(v,3);										// root, class							 - workaround
+	sq_pushstring(v,_SC("_stream"),-1);					// root, class, name
+	sq_getmemberhandle(v,-2, &wrt__stream_handle);		// root, class
+	sq_poptop(v);										// root
+
 	return SQ_OK;
 }
