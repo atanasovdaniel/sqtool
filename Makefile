@@ -5,6 +5,11 @@ nothing:
 CC:=gcc
 CXX:=g++
 
+ifndef config
+config:=release
+$(info unsing default config=$(config))
+endif
+
 include ./etc/make_lib.inc
 
 SQUIRREL_ROOT:=./squirrel
@@ -21,8 +26,16 @@ CFLAGS:=-static-libgcc -static-libstdc++
 else
 endif
 
-#CFLAGS+=-O2
-CFLAGS+=-g
+ifeq ($(config),release)
+CFLAGS+=-O2
+else ifeq ($(config),debug)
+CFLAGS+=-g -Og
+else ifeq ($(config),gcov)
+CFLAGS+=-g -Og -fprofile-arcs -ftest-coverage
+else
+$(error Unknown config $(config))
+endif
+
 CFLAGS+=-Wall -fno-strict-aliasing
 CXXFLAGS:=-fno-exceptions -fno-rtti
 
@@ -87,13 +100,13 @@ $(eval $(call SOURCE_FOLDER,./sqtool))
 CXX_SOURCE_FILES+=$(SQUIRREL_ROOT)/sqstdlib/sqstdaux.cpp
 $(eval $(call MAKE_EXE, sqtool))
 
-all: OUT_DIRS $(LIBRARY_FILES) $(EXECUTABLE_FILES)
+all: out_dirs $(LIBRARY_FILES) $(EXECUTABLE_FILES)
 	echo Done
 
-OUT_DIRS:
+out_dirs:
 	mkdir -p $(sort $(OUTPUT_DIRS))
 
 clean:
 	rm -rf $(EXE_DIR)
-	
-.PHONY: nothing all clean OUT_DIRS
+
+.PHONY: nothing all clean out_dirs

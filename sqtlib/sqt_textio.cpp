@@ -27,7 +27,8 @@ static const uint8_t utf8_lengths[16] =
 	4                       /* 1111 :4 bytes */
 };
 
-static unsigned char utf8_byte_masks[5] = {0,0,0x1f,0x0f,0x07};
+static uint8_t utf8_byte_masks[5] = {0,0,0x1f,0x0f,0x07};
+static uint32_t utf8_min_codept[5] = {0,0,0x80,0x800,0x10000};
 
 struct TextConverter;
 
@@ -173,15 +174,18 @@ struct TextConverter
 		uint8_t c;
 		if( SQ_FAILED(BytesReadU8( &c))) return SQ_ERROR;		// EOF (SQCCV_TOOFEW)
 		if( c < 0x80) { *pwc = c; return SQ_OK; }
-		else if( c < 0xC2) { *pwc = _bad_char; return SQTC_ILSEQ; }	// SQCCV_ILSEQ
+		//else if( c < 0xC2) { *pwc = _bad_char; return SQTC_ILSEQ; }	// SQCCV_ILSEQ
+		else if( c < 0xC0) { *pwc = _bad_char; return SQTC_ILSEQ; }	// SQCCV_ILSEQ
 		else {
 			SQInteger codelen = utf8_lengths[ c >> 4];
+			SQInteger n = codelen;
 			uint32_t wc = c & utf8_byte_masks[codelen];
-			while( --codelen) {
+			while( --n) {
 				if( SQ_FAILED(BytesReadU8( &c))) { return SQTC_TOOFEW; }		// EOF (SQCCV_TOOFEW)
 				if( (c & 0xC0) != 0x80) { *pwc = _bad_char; return SQTC_ILSEQ; }	// SQCCV_ILSEQ
 				wc <<= 6; wc |= c & 0x3F;
 			}
+			if( wc < utf8_min_codept[codelen]) { *pwc = _bad_char; return SQTC_ILSEQ; }	// SQCCV_ILSEQ
 			*pwc = wc;
 			return SQ_OK;
 		}
@@ -227,7 +231,8 @@ struct TextConverter
 				if( SQ_FAILED(BytesReadU16( &c))) return SQTC_TOOFEW;	// EOF (SQCCV_TOOFEW)
 				if( c >= 0xDC00 && c < 0xE000) {
 					wc = 0x10000 + ((wc - 0xD800) << 10) + (c - 0xDC00);
-					return wc;
+					*pwc = wc;
+					return SQ_OK;
 				}
 				else { *pwc = _bad_char; return SQTC_ILSEQ;	} // SQCCV_ILSEQ
 			}
@@ -425,7 +430,7 @@ struct SQTextReader : public SQStream
     SQInteger Len() { return -1; }
     SQInteger Seek(SQInteger offset, SQInteger origin) { return -1; }
     bool IsValid() { return (_stream != NULL) && _stream->IsValid(); }
-    bool EOS() { return (_stream == NULL) || _stream->EOS(); }
+    bool EOS() { return (_buf_pos == 0) && ((_stream == NULL) || _stream->EOS()); }
     SQInteger Close()
 	{
 		SQInteger r = 0;
