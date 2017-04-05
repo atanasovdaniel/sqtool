@@ -1,4 +1,6 @@
 
+fails <- 0;
+
 UTF8_TESTS <- [
 
 	// 1 byte
@@ -226,33 +228,33 @@ function compare( A, B)
 	local alen = A.len();
 	local blen = B.len();
 	local len = (alen < blen) ? alen : blen;
-	local r = true;
+	local r = 0;
 	local i;
 	for( i=0; i < len; i++)
 	{
 		if( A[i] != B[i])
 		{
 			::print( " " + A[i] + "/" + B[i]);
-			r = false;
+			r = 1;
 		}
 		else
 			::print( " " + A[i]);
 	}
 	if( i < alen)
 	{
-		r = false;
+		r = 1;
 		::print( " <");
 		for( ; i < alen; i++)
 			::print( " " + A[i]);
 	}
 	if( i < blen)
 	{
-		r = false;
+		r = 1;
 		::print( " >");
 		for( ; i < blen; i++)
 			::print( " " + B[i]);
 	}
-	::print( "\t - " + (r ? "OK" : "NOK") + "\n");
+	::print( "\t - " + ((r==0) ? "OK" : "NOK") + "\n");
 	return r;
 }
 
@@ -287,7 +289,7 @@ function do_test_whole( tests, encoding)
 		
 		print( "in  "); bin.dump();
 		print( "out "); bwr.dump();
-		print( "cmp "); compare( bout, bwr);
+		print( "cmp "); fails += compare( bout, bwr);
 	}
 }
 
@@ -312,9 +314,14 @@ function do_test_one( test, encoding)
 	
 	print( "in  "); bin.dump();
 	print( "out "); bout.dump();
-	print( "cmp "); compare( bin, bout);
+	print( "cmp "); fails += compare( bin, bout);
 }
 
 do_test_one( [ 0x7F,  0xDF, 0xBF  ,0xEF, 0xBF, 0xBF,  0xF4, 0x8F, 0xBF, 0xBF,  0x7F ], "UTF-8");
 do_test_one( [ 0xD7, 0xFF,  0xDB, 0xFF, 0xDF, 0xFF,  0xD7, 0xFF ], "UTF-16BE");
+
+if( fails)
+{
+	print( "-------------------\nFAILED\n");
+}
 
