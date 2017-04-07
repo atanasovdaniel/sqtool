@@ -20,10 +20,10 @@ B <- blob();
 }
 //B.dump();
 
-function test_1()
+function test_1( buff_size)
 {
 	B.seek(0);
-	local s = streamreader( B, false);
+	local s = streamreader( B, false, buff_size);
 	local b;
 	local r;
 	
@@ -68,10 +68,10 @@ function test_1()
 	if( !r) print( "!!! Bad reset() result\n");
 }
 
-function test_2()
+function test_2( buff_size)
 {
 	B.seek(0);
-	local s = streamreader( B, false);
+	local s = streamreader( B, false, buff_size);
 	local b;
 	local r;
 	
@@ -116,10 +116,10 @@ function test_2()
 	if( !r) print( "!!! Bad reset() result\n");
 }
 
-function test_3()
+function test_3( buff_size)
 {
 	B.seek(0);
-	local s = streamreader( B, false);
+	local s = streamreader( B, false, buff_size);
 	local b;
 	local r;
 	
@@ -174,7 +174,7 @@ function test_3()
 	if( !r) print( "!!! Bad reset() result\n");
 }
 
-function test_4()
+function test_4( buff_size)
 {
 	local b;
 	local r;
@@ -183,7 +183,7 @@ function test_4()
 	bb.dump();
 
 	bb.seek(0);
-	local s = streamreader(bb,false);
+	local s = streamreader(bb,false, buff_size);
 	
 	// put mark for 10 bytes
 	r = s.mark(10);
@@ -226,14 +226,14 @@ function test_4()
 	if( !r) print( "!!! Bad EOS\n");
 }
 
-function test_5()
+function test_5( buff_size)
 {
 	local b;
 	local r;
 	local f;
 	
 	f = file("./test/file_nt.txt","r");
-	local s = streamreader(f,false);
+	local s = streamreader(f,false,buff_size);
 	
 	// put mark for 10 bytes
 	r = s.mark(10);
@@ -279,7 +279,7 @@ function test_5()
 	f.close();
 }
 
-function test_6()
+function test_6( buff_size)
 {
 	local s;
 	local r;
@@ -288,7 +288,7 @@ function test_6()
 	r = collectgarbage();
 	print( "collectgarbage() -> " + r + "\n");
 	
-	s = streamreader( blob(10), false);
+	s = streamreader( blob(10), false, buff_size);
 	r = collectgarbage();
 	print( "collectgarbage() -> " + r + "\n");
 	
@@ -303,15 +303,26 @@ function test_6()
 	
 }
 
-test_1();
-print("\n");
-test_2();
-print("\n");
-test_3();
-print("\n");
-test_4();
-print("\n");
-test_5();
-print("\n");
-test_6();
+function test_all( buff_size)
+{
+	print("\n----------------\n");
+	print("buff_size=" + buff_size + "\n");
+	print("----------------\n");
+	
+	test_1(buff_size);
+	print("\n");
+	test_2(buff_size);
+	print("\n");
+	test_3(buff_size);
+	print("\n");
+	test_4(buff_size);
+	print("\n");
+	test_5(buff_size);
+	print("\n");
+	test_6(buff_size);
+}
+
+test_all(0);
+test_all(1);
+test_all(1000);
 

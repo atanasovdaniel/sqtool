@@ -7,7 +7,7 @@ extern "C" {
 
 typedef struct SQT_SRDR_tag *SQT_SRDR;
 
-SQUIRREL_API SQT_SRDR sqtsrdr_create( SQFILE stream, SQBool owns);
+SQUIRREL_API SQT_SRDR sqtsrdr_create( SQFILE stream, SQBool owns, SQInteger buffer_size);
 SQUIRREL_API SQInteger sqtsrdr_mark( SQT_SRDR srdr, SQInteger readAheadLimit);
 SQUIRREL_API SQInteger sqtsrdr_reset( SQT_SRDR srdr);
 
