@@ -5,6 +5,8 @@
 #include <sqstdio.h>
 #include <sqtstreamreader.h>
 
+#define IO_BUFFER_SIZE 2048
+
 // typedef SQInteger (*SQLEXREADFUNC)(SQUserPointer);
 // typedef SQInteger (*SQWRITEFUNC)(SQUserPointer,SQUserPointer,SQInteger);
 // typedef SQInteger (*SQREADFUNC)(SQUserPointer,SQUserPointer,SQInteger);
@@ -69,7 +71,7 @@ SQRESULT sqt_loadfile(HSQUIRRELVM v, SQFILE file, const SQChar *filename, SQBool
 	SQRESULT r;
 	SQT_SRDR srdr;
 	
-	srdr = sqtsrdr_create( file, SQFalse);
+	srdr = sqtsrdr_create( file, SQFalse, IO_BUFFER_SIZE);
 	if( srdr != NULL) {
 		r = sqt_loadfile_srdr( v, srdr, filename, printerror);
 		sqstd_frelease( (SQFILE)srdr);
