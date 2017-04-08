@@ -27,6 +27,10 @@ extern SQUIRREL_API_VAR const SQTClassDecl std_file_decl;
 #define SQSTD_FILE_TYPE_TAG ((SQUserPointer)&std_file_decl)
 extern SQUIRREL_API_VAR const SQTClassDecl std_popen_decl;
 #define SQSTD_POPEN_TYPE_TAG ((SQUserPointer)&std_popen_decl)
+extern SQUIRREL_API_VAR const SQTClassDecl std_textreader_decl;
+#define SQSTD_TEXTREADER_TYPE_TAG ((SQUserPointer)&std_textreader_decl)
+extern SQUIRREL_API_VAR const SQTClassDecl std_textwriter_decl;
+#define SQSTD_TEXTWRITER_TYPE_TAG ((SQUserPointer)&std_textwriter_decl)
 
 #define SQ_SEEK_CUR 0
 #define SQ_SEEK_END 1
@@ -50,6 +54,11 @@ SQUIRREL_API SQFILE sqstd_fopen(const SQChar *,const SQChar *);
 SQUIRREL_API SQRESULT sqstd_createfile(HSQUIRRELVM v, SQFILE file,SQBool own);
 SQUIRREL_API SQRESULT sqstd_getfile(HSQUIRRELVM v, SQInteger idx, SQFILE *file);
 
+SQUIRREL_API SQFILE sqstd_blob(SQInteger size);
+
+SQUIRREL_API SQFILE sqt_textreader( SQFILE stream, SQBool owns, const SQChar *encoding, SQBool guess);
+SQUIRREL_API SQFILE sqt_textwriter( SQFILE stream, SQBool owns, const SQChar *encoding);
+
 //compiler helpers
 SQUIRREL_API SQRESULT sqt_loadfile(HSQUIRRELVM v, SQFILE file, const SQChar *filename, SQBool printerror);
 SQUIRREL_API SQRESULT sqt_dofile(HSQUIRRELVM v, SQFILE file, const SQChar *filename,SQBool retval,SQBool printerror);
@@ -60,6 +69,7 @@ SQUIRREL_API SQRESULT sqstd_writeclosuretofile(HSQUIRRELVM v,const SQChar *filen
 
 SQUIRREL_API SQRESULT sqstd_register_iolib(HSQUIRRELVM v);
 SQUIRREL_API SQRESULT sqstd_register_squirrelio(HSQUIRRELVM v);
+SQUIRREL_API SQRESULT sqstd_register_textreader(HSQUIRRELVM v);
 
 #ifdef __cplusplus
 } /*extern "C"*/

@@ -16,6 +16,9 @@ SQUIRREL_API SQRESULT sqstd_register_streamrdr(HSQUIRRELVM v);
 extern SQUIRREL_API_VAR const SQTClassDecl sqt_streamrdr_decl;
 #define SQT_STREAMREADER_TYPE_TAG ((SQUserPointer)&sqt_streamrdr_decl)
 
+SQUIRREL_API const SQChar *sqt_guessencoding( SQT_SRDR srdr);
+SQUIRREL_API SQFILE sqt_textreader_sr( SQT_SRDR srdr, SQBool owns_close, SQBool owns_release, const SQChar *encoding, SQBool guess);
+
 #ifdef __cplusplus
 } /*extern "C"*/
 #endif
