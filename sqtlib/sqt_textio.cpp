@@ -590,10 +590,16 @@ static const SQRegFunction _textreader_methods[] = {
     {NULL,(SQFUNCTION)0,0,NULL}
 };
 
+static const SQTMemberDecl _textreader_members[] = {
+	{_SC("_stream"), &rdr__stream_handle },
+	{NULL,NULL}
+};
+
 const SQTClassDecl std_textreader_decl = {
 	&std_stream_decl,	// base_class
     _SC("std_textreader"),	// reg_name
     _SC("textreader"),		// name
+	_textreader_members,	// members
 	_textreader_methods,	// methods
 	NULL,				// globals
 };
@@ -821,10 +827,16 @@ static const SQRegFunction _textwriter_methods[] = {
     {NULL,(SQFUNCTION)0,0,NULL}
 };
 
+static const SQTMemberDecl _textwriter_members[] = {
+	{_SC("_stream"), &wrt__stream_handle },
+	{NULL,NULL}
+};
+
 const SQTClassDecl std_textwriter_decl = {
 	&std_stream_decl,	// base_class
     _SC("std_textwriter"),	// reg_name
     _SC("textwriter"),		// name
+	_textwriter_members,	// members
 	_textwriter_methods,	// methods
 	NULL,				// globals
 };
@@ -839,29 +851,13 @@ SQUIRREL_API SQRESULT sqstd_register_textreader(HSQUIRRELVM v)
 	{
 		return SQ_ERROR;
 	}
-	//sq_newmember(...)
-	sq_pushstring(v,_SC("_stream"),-1);					// root, class, name
-	sq_pushnull(v);										// root, class, name, value
-	sq_pushnull(v);										// root, class, name, value, attribute
-	sq_newmember(v,-4,SQFalse);							// root, class, [name, value, attribute] - bay be a bug (name, value, attribute not poped)
-	sq_pop(v,3);										// root, class							 - workaround
-	sq_pushstring(v,_SC("_stream"),-1);					// root, class, name
-	sq_getmemberhandle(v,-2, &rdr__stream_handle);		// root, class
-	sq_poptop(v);										// root
+ 	sq_poptop(v);
 
 	if(SQ_FAILED(sqt_declareclass(v,&std_textwriter_decl)))
 	{
 		return SQ_ERROR;
 	}
-	//sq_newmember(...)
-	sq_pushstring(v,_SC("_stream"),-1);					// root, class, name
-	sq_pushnull(v);										// root, class, name, value
-	sq_pushnull(v);										// root, class, name, value, attribute
-	sq_newmember(v,-4,SQFalse);							// root, class, [name, value, attribute] - bay be a bug (name, value, attribute not poped)
-	sq_pop(v,3);										// root, class							 - workaround
-	sq_pushstring(v,_SC("_stream"),-1);					// root, class, name
-	sq_getmemberhandle(v,-2, &wrt__stream_handle);		// root, class
-	sq_poptop(v);										// root
+ 	sq_poptop(v);
 
 	return SQ_OK;
 }

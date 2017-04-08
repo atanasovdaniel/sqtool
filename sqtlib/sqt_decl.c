@@ -24,6 +24,37 @@ SQInteger sqt_declarefunctions( HSQUIRRELVM v, const SQRegFunction *fcts)
     return SQ_OK;
 }
 
+SQInteger sqt_declaremembers( HSQUIRRELVM v, const SQTMemberDecl *membs)
+{
+    if( membs != 0) {
+		const SQTMemberDecl	*m = membs;
+		SQInteger top = sq_gettop(v);
+		while( m->name != 0) {
+            SQBool bstatic = SQFalse;
+			SQBool handle_only= SQFalse;
+            const SQChar *name = m->name;
+			while( (*name == _SC('-')) || (*name == _SC('&')) ) {
+				if( *name == '-') bstatic = SQTrue;
+				else if( *name == '&') handle_only = SQTrue;
+				name++;
+			}
+			if( !handle_only) {
+				sq_pushstring(v,name,-1);					// class, name
+				sq_pushnull(v);								// class, name, value
+				sq_pushnull(v);								// class, name, value, attribute
+				sq_newmember(v,-4,bstatic);					// class, [name, value, attribute] - bay be a bug (name, value, attribute not poped)
+				sq_settop(v,top);							// class                           - workaround
+			}
+			if( m->phandle != 0) {
+				sq_pushstring(v,name,-1);				// class, name
+				sq_getmemberhandle(v,-2, m->phandle);	// class
+			}
+			m++;
+		}
+    }
+	return SQ_OK;
+}
+
 SQInteger sqt_declareclass( HSQUIRRELVM v, const SQTClassDecl *decl)
 {															// root
     sq_pushregistrytable(v);								// root, registry
@@ -39,25 +70,9 @@ SQInteger sqt_declareclass( HSQUIRRELVM v, const SQTClassDecl *decl)
 			sq_newclass(v,SQFalse);							// root, new_class
 		}
         sq_settypetag(v,-1,(SQUserPointer)decl);
+		sqt_declaremembers(v,decl->members);
 		sqt_declarefunctions(v,decl->methods);
-/*
-		if( decl->methods != 0) {
-			const SQRegFunction	*f = decl->methods;
-			while( f->name != 0) {
-				SQBool bstatic = SQFalse;
-				const SQChar *typemask = f->typemask;
-				if( typemask && (typemask[0] == _SC('-'))) {	// if first char of typemask is '-', make static function
-					typemask++;
-					bstatic = SQTrue;
-				}
-				sq_pushstring(v,f->name,-1);				// root, new_class, method_name
-				sq_newclosure(v,f->f,0);					// root, new_class, method_name, method_fct
-				sq_setparamscheck(v,f->nparamscheck,typemask);
-				sq_newslot(v,-3,bstatic);					// root, new_class
-				f++;
-			}
-		}
-*/
+		
 		sq_pushregistrytable(v);							// root, new_class, registry
 		sq_pushstring(v,decl->reg_name,-1);					// root, new_class, registry, reg_name
 		sq_push(v,-3);										// root, new_class, registry, reg_name, new_class

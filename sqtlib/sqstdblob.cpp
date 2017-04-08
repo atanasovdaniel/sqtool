@@ -247,6 +247,7 @@ const SQTClassDecl std_blob_decl = {
 	&std_stream_decl,	// base_class
     _SC("std_blob"),	// reg_name
     _SC("blob"),		// name
+	NULL,				// members
 	_blob_methods,		// methods
 	bloblib_funcs,		// globals
 };

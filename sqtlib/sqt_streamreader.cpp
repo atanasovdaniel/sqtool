@@ -256,10 +256,16 @@ static const SQRegFunction _srdr_methods[] = {
     {NULL,(SQFUNCTION)0,0,NULL}
 };
 
+static const SQTMemberDecl _srdr_members[] = {
+	{_SC("_stream"), &srdr__stream_handle },
+	{NULL,NULL}
+};
+
 const SQTClassDecl sqt_streamrdr_decl = {
 	&std_stream_decl,	// base_class
     _SC("sqt_streamreader"),	// reg_name
     _SC("streamreader"),		// name
+	_srdr_members,			// members
 	_srdr_methods,		// methods
 	NULL,				// globals
 };
@@ -270,15 +276,7 @@ SQUIRREL_API SQRESULT sqstd_register_streamrdr(HSQUIRRELVM v)
 	{
 		return SQ_ERROR;
 	}
-	//sq_newmember(...)
-	sq_pushstring(v,_SC("_stream"),-1);					// root, class, name
-	sq_pushnull(v);										// root, class, name, value
-	sq_pushnull(v);										// root, class, name, value, attribute
-	sq_newmember(v,-4,SQFalse);							// root, class, [name, value, attribute] - bay be a bug (name, value, attribute not poped)
-	sq_pop(v,3);										// root, class							 - workaround
-	sq_pushstring(v,_SC("_stream"),-1);					// root, class, name
-	sq_getmemberhandle(v,-2, &srdr__stream_handle);		// root, class
-	sq_poptop(v);										// root
+ 	sq_poptop(v);
 	return SQ_OK;
 }
 

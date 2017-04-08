@@ -371,6 +371,7 @@ const SQTClassDecl std_stream_decl = {
 	NULL,				// base_class
     _SC("std_stream"),	// reg_name
     _SC("stream"),		// name
+	NULL,				// members
 	_stream_methods,	// methods
 	NULL,		// globals
 };

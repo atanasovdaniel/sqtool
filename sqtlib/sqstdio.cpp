@@ -210,6 +210,7 @@ const SQTClassDecl std_file_decl = {
 	&std_stream_decl,	// base_class
     _SC("std_file"),	// reg_name
     _SC("file"),		// name
+	NULL,				// members
 	_file_methods,		// methods
 	NULL,				// globals
 };
@@ -266,6 +267,7 @@ const SQTClassDecl std_popen_decl = {
 	&std_file_decl,	// base_class
     _SC("std_popen"),	// reg_name
     _SC("popen"),		// name
+	NULL,				// members
 	_popen_methods,		// methods
 	NULL,				// globals
 };

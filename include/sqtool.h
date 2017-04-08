@@ -29,15 +29,22 @@ THE SOFTWARE.
 extern "C" {
 #endif
 
+typedef struct tagSQTMemberDecl {
+    const SQChar *name;
+    HSQMEMBERHANDLE *phandle;
+} SQTMemberDecl;
+
 typedef struct tagSQTClassDecl {
 	const struct tagSQTClassDecl *base_class;
     const SQChar *reg_name;
     const SQChar *name;
+    const SQTMemberDecl *members;
 	const SQRegFunction	*methods;
 	const SQRegFunction	*globals;
 } SQTClassDecl;
 
 SQUIRREL_API SQInteger sqt_declareclass( HSQUIRRELVM v, const SQTClassDecl *decl);
+SQUIRREL_API SQInteger sqt_declaremembers( HSQUIRRELVM v, const SQTMemberDecl *membs);
 SQUIRREL_API SQInteger sqt_declarefunctions( HSQUIRRELVM v, const SQRegFunction *fcts);
 
 #ifdef _WIN32
