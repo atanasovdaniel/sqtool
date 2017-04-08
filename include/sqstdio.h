@@ -56,6 +56,9 @@ SQUIRREL_API SQRESULT sqstd_getfile(HSQUIRRELVM v, SQInteger idx, SQFILE *file);
 
 SQUIRREL_API SQFILE sqstd_blob(SQInteger size);
 
+SQUIRREL_API SQFILE sqt_textreader( SQFILE stream, SQBool owns, const SQChar *encoding, SQBool guess);
+SQUIRREL_API SQFILE sqt_textwriter( SQFILE stream, SQBool owns, const SQChar *encoding);
+
 //compiler helpers
 SQUIRREL_API SQRESULT sqt_loadfile(HSQUIRRELVM v, SQFILE file, const SQChar *filename, SQBool printerror);
 SQUIRREL_API SQRESULT sqt_dofile(HSQUIRRELVM v, SQFILE file, const SQChar *filename,SQBool retval,SQBool printerror);

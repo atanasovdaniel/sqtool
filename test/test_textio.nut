@@ -293,9 +293,6 @@ function do_test_whole( tests, encoding)
 	}
 }
 
-do_test_whole( UTF8_TESTS, "UTF-8");
-do_test_whole( UTF16BE_TESTS, "UTF-16BE");
-
 function do_test_one( test, encoding)
 {
 	print( "-------------------\n");
@@ -317,8 +314,87 @@ function do_test_one( test, encoding)
 	print( "cmp "); fails += compare( bin, bout);
 }
 
+GUESS_TESTS <- [
+
+	// UTF-8 BOM
+	{
+		inp = [ 0xef, 0xbb, 0xbf, 'A', 'B', 'C' ],
+		out = [ 'A', 'B', 'C' ],
+	},
+	// UTF-16BE BOM
+	{
+		inp = [ 0xfe, 0xff, 0x00, 0x41, 0x00, 0x42, 0x00, 0x43 ],
+		out = [ 'A', 'B', 'C' ],
+	},
+	// UTF-16LE BOM
+	{
+		inp = [ 0xff, 0xfe, 0x41, 0x00, 0x42, 0x00, 0x43, 0x00 ],
+		out = [ 'A', 'B', 'C' ],
+	},
+	// UTF-8 no BOM
+	{
+		inp = [ 'A', 'B', 'C' ],
+		out = [ 'A', 'B', 'C' ],
+	},
+];
+
+function do_test_guess( test)
+{
+	print( "-------------------\n");
+	local bin = mk_blob( test.inp);
+	local rdr = textreader( bin, false, "UTF-8", true);
+	local bout = blob();
+	local wrt = textwriter( bout, false, "UTF-8");
+	
+	local b = rdr.readblob(1000);
+	wrt.writeblob(b);
+	
+	wrt.close();
+	
+	print( "in  "); bin.dump();
+	print( "out "); bout.dump();
+	print( "cmp "); fails += compare( bout, test.out);
+}
+
+AUTO_UTF16 <- [
+
+	// UTF-16BE
+	{
+		inp = [ 0xfe, 0xff, 0x00, 0x41, 0x00, 0x42, 0x00, 0x43 ],
+		out = [ 'A', 'B', 'C' ],
+	},
+	// UTF-16LE
+	{
+		inp = [ 0xff, 0xfe, 0x41, 0x00, 0x42, 0x00, 0x43, 0x00 ],
+		out = [ 'A', 'B', 'C' ],
+	},
+];
+
+function do_test_auto_utf16( test)
+{
+	print( "-------------------\n");
+	local bin = mk_blob( test.inp);
+	local rdr = textreader( bin, false, "UTF-16");
+	local bout = blob();
+	local wrt = textwriter( bout, false, "UTF-8");
+	
+	local b = rdr.readblob(1000);
+	wrt.writeblob(b);
+	
+	wrt.close();
+	
+	print( "in  "); bin.dump();
+	print( "out "); bout.dump();
+	print( "cmp "); fails += compare( bout, test.out);
+}
+
+do_test_whole( UTF8_TESTS, "UTF-8");
+do_test_whole( UTF16BE_TESTS, "UTF-16BE");
 do_test_one( [ 0x7F,  0xDF, 0xBF  ,0xEF, 0xBF, 0xBF,  0xF4, 0x8F, 0xBF, 0xBF,  0x7F ], "UTF-8");
 do_test_one( [ 0xD7, 0xFF,  0xDB, 0xFF, 0xDF, 0xFF,  0xD7, 0xFF ], "UTF-16BE");
+
+foreach( t in GUESS_TESTS) do_test_guess(t);
+foreach( t in AUTO_UTF16) do_test_auto_utf16(t);
 
 if( fails)
 {

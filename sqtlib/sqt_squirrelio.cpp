@@ -56,8 +56,13 @@ static SQRESULT sqt_loadfile_srdr(HSQUIRRELVM v, SQT_SRDR srdr, const SQChar *fi
 			}
 		}
 		else { //SCRIPT
-			if(SQ_SUCCEEDED(sq_compile( v, sqt_SQLEXREADFUNC, srdr, filename, printerror))){
-				return SQ_OK;
+			SQFILE trdr = sqt_textreader_sr( srdr, SQFalse, SQFalse, _SC("UTF-8"), SQTrue);
+			if( trdr != NULL) {
+				if(SQ_SUCCEEDED(sq_compile( v, sqt_SQLEXREADFUNC, trdr, filename, printerror))){
+					sqstd_frelease(trdr);
+					return SQ_OK;
+				}
+				sqstd_frelease(trdr);
 			}
 		}
     }

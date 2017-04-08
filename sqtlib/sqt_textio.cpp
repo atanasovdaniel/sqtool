@@ -348,6 +348,28 @@ static const encodings_list_tag *find_encoding( const SQChar *name)
 }
 
 /* ====================================
+		Guess encoding
+==================================== */
+
+const SQChar *sqt_guessencoding( SQT_SRDR srdr)
+{
+	uint8_t buf[3];
+
+	sqtsrdr_mark( srdr, sizeof(buf));
+	if( sqstd_fread( buf, 2, (SQFILE)srdr) == 2) {
+		if( (buf[0] == 0xFE) && (buf[1] == 0xFF))		return _SC("UTF-16BE");
+		else if( (buf[0] == 0xFF) && (buf[1] == 0xFE))	return _SC("UTF-16LE");
+		else if( (buf[0] == 0xEF) && (buf[1] == 0xBB)) {
+			if( sqstd_fread( buf+2, 1, (SQFILE)srdr) == 1) {
+				if( buf[2] == 0xBF)						return _SC("UTF-8");
+			}
+		}
+	}
+	sqtsrdr_reset( srdr);
+	return NULL;
+}
+
+/* ====================================
 		Text Reader
 ==================================== */
 
@@ -358,9 +380,10 @@ static SQInteger SQTextReaderWrite( SQUserPointer user, const uint8_t *p, SQInte
 
 struct SQTextReader : public SQStream
 {
-	SQTextReader( SQStream *stream, SQBool owns) : _converter(SQTextReaderRead,SQTextReaderWrite,this) {
+	SQTextReader( SQStream *stream, SQBool owns_close, SQBool owns_release) : _converter(SQTextReaderRead,SQTextReaderWrite,this) {
 		_stream = stream;
-		_owns = owns;
+		_owns_close = owns_close;
+		_owns_release = owns_release;
 		_buf_len = 0;
 		_buf_pos = 0;
 #ifdef SQUNICODE
@@ -419,7 +442,7 @@ struct SQTextReader : public SQStream
 		return _stream->Read( p, n);
 	}
 
-	SQInteger SetEncoding( const SQChar *encoding, SQBool guess)
+	SQInteger SetEncoding( const SQChar *encoding)
 	{
 		return _converter.SetReadEncoding( encoding);
 	}
@@ -434,16 +457,16 @@ struct SQTextReader : public SQStream
     SQInteger Close()
 	{
 		SQInteger r = 0;
-		if( (_stream != NULL) && _owns) {
+		if( (_stream != NULL) && _owns_close) {
 			r = _stream->Close();
-			_stream = NULL;
-			_owns = SQFalse;
+			_owns_close = SQFalse;
 		}
 		return r;
 	}
 
     void _Release()
 	{
+		if( (_stream != NULL) && _owns_release) _stream->_Release();
 		this->~SQTextReader();
 		sq_free(this,sizeof(SQTextReader));
 	}
@@ -451,7 +474,8 @@ struct SQTextReader : public SQStream
 protected:
 	TextConverter _converter;
 	SQStream *_stream;
-	SQBool _owns;
+	SQBool _owns_close;
+	SQBool _owns_release;
 	SQInteger _buf_len;
 	SQInteger _buf_pos;
 	uint8_t _buf[CBUFF_SIZE];
@@ -470,6 +494,39 @@ SQInteger SQTextReaderWrite( SQUserPointer user, const uint8_t *p, SQInteger n)
 }
 
 // ------------------------------------
+// TextReader API
+
+SQFILE sqt_textreader_sr( SQT_SRDR srdr, SQBool owns_close, SQBool owns_release, const SQChar *encoding, SQBool guess)
+{
+	if( guess) {
+		const SQChar *genc = sqt_guessencoding( srdr);
+		if( genc != NULL)
+			encoding = genc;
+	}
+	SQTextReader *rdr = new (sq_malloc(sizeof(SQTextReader)))SQTextReader( (SQStream*)srdr, owns_close, owns_release);
+	if( encoding != NULL) {
+		if( SQ_FAILED(rdr->SetEncoding( encoding))) {
+			rdr->_Release();
+			return NULL;
+		}
+	}
+	return (SQFILE)rdr;
+}
+
+SQFILE sqt_textreader( SQFILE stream, SQBool owns, const SQChar *encoding, SQBool guess)
+{
+	SQBool owns_release = SQFalse;
+	if( guess) {
+		SQT_SRDR srdr = sqtsrdr_create( stream, owns, 0);
+		if( srdr == NULL) return NULL;
+		stream = (SQFILE)srdr;
+		owns = SQTrue;
+		owns_release = SQTrue;
+	}
+	return sqt_textreader_sr( (SQT_SRDR)stream, owns, owns_release, encoding, guess);
+}
+
+// ------------------------------------
 // TextReader Bindings
 
 static SQInteger _textreader__typeof(HSQUIRRELVM v)
@@ -481,34 +538,39 @@ static SQInteger _textreader__typeof(HSQUIRRELVM v)
 static SQInteger _textreader_constructor(HSQUIRRELVM v)
 {
 	SQInteger top = sq_gettop(v);
-	SQStream *stream;
+	SQFILE stream;
 	SQBool owns = SQFalse;
+	const SQChar *encoding = NULL;
+	SQBool guess = SQFalse;
+	SQBool stream_is_reader = SQTrue;
 
-    if( SQ_FAILED( sq_getinstanceup( v,2,(SQUserPointer*)&stream,(SQUserPointer)SQSTD_STREAM_TYPE_TAG))) {
-        return sq_throwerror(v,_SC("invalid argument type"));
+    if( SQ_FAILED( sq_getinstanceup( v,2,(SQUserPointer*)&stream,(SQUserPointer)SQT_STREAMREADER_TYPE_TAG))) {
+		stream_is_reader = SQFalse;
+	    if( SQ_FAILED( sq_getinstanceup( v,2,(SQUserPointer*)&stream,(SQUserPointer)SQSTD_STREAM_TYPE_TAG)))
+	        return sq_throwerror(v,_SC("invalid argument type"));
 	}
-
 	if( top > 2) {
 		sq_getbool(v, 3, &owns);
-	}
-
-	SQTextReader *rdr = new (sq_malloc(sizeof(SQTextReader)))SQTextReader( stream, owns);
-
-	if( top > 3) {
-		const SQChar *encoding;
-		SQBool guess = SQFalse;
-        sq_getstring(v, 4, &encoding);
-		if( top > 4) {
-			sq_getbool(v, 4, &guess);
-		}
-		if( SQ_FAILED(rdr->SetEncoding( encoding, guess))) {
-			rdr->_Release();
-			return sq_throwerror(v, _SC("cannot set encoding"));
+		if( top > 3) {
+			sq_getstring(v, 4, &encoding);
+			if( top > 4) {
+				sq_getbool(v, 5, &guess);
+			}
 		}
 	}
+
+	SQFILE rdr;
+	if( stream_is_reader) {
+		rdr = sqt_textreader_sr( (SQT_SRDR)stream, owns, SQFalse, encoding, guess);
+	}
+	else {
+		rdr = sqt_textreader( stream, owns, encoding, guess);
+	}
+	if( rdr == NULL)
+		return sq_throwerror(v, _SC("cannot create textreader"));
 
     if(SQ_FAILED(sq_setinstanceup(v,1,rdr))) {
-		rdr->_Release();
+		sqstd_frelease(rdr);
         return sq_throwerror(v, _SC("cannot create textreader instance"));
     }
 
@@ -629,7 +691,7 @@ struct SQTextWriter : public SQStream
 		return _stream->Write( (void*)p, n);
 	}
 
-	SQInteger SetEncoding( const SQChar *encoding, SQBool guess)
+	SQInteger SetEncoding( const SQChar *encoding)
 	{
 		return _converter.SetWriteEncoding( encoding);
 	}
@@ -693,6 +755,21 @@ SQInteger SQTextWriterWrite( SQUserPointer user, const uint8_t *p, SQInteger n)
 }
 
 // ------------------------------------
+// TextWriter API
+
+SQFILE sqt_textwriter( SQFILE stream, SQBool owns, const SQChar *encoding)
+{
+	SQTextWriter *wrt = new (sq_malloc(sizeof(SQTextWriter)))SQTextWriter( (SQStream*)stream, owns);
+	if( encoding) {
+		if( SQ_FAILED(wrt->SetEncoding( encoding))) {
+			wrt->_Release();
+			return NULL;
+		}
+	}
+	return (SQFILE)wrt;
+}
+
+// ------------------------------------
 // TextWriter Bindings
 
 static SQInteger _textwriter__typeof(HSQUIRRELVM v)
@@ -704,8 +781,9 @@ static SQInteger _textwriter__typeof(HSQUIRRELVM v)
 static SQInteger _textwriter_constructor(HSQUIRRELVM v)
 {
 	SQInteger top = sq_gettop(v);
-	SQStream *stream;
+	SQFILE stream;
 	SQBool owns = SQFalse;
+	const SQChar *encoding = NULL;
 
     if( SQ_FAILED( sq_getinstanceup( v,2,(SQUserPointer*)&stream,(SQUserPointer)SQSTD_STREAM_TYPE_TAG))) {
         return sq_throwerror(v,_SC("invalid argument type"));
@@ -713,25 +791,17 @@ static SQInteger _textwriter_constructor(HSQUIRRELVM v)
 
 	if( top > 2) {
 		sq_getbool(v, 3, &owns);
-	}
-
-	SQTextWriter *wrt = new (sq_malloc(sizeof(SQTextWriter)))SQTextWriter( stream, owns);
-
-	if( top > 3) {
-		const SQChar *encoding;
-		SQBool guess = SQFalse;
-        sq_getstring(v, 4, &encoding);
-		if( top > 4) {
-			sq_getbool(v, 4, &guess);
-		}
-		if( SQ_FAILED(wrt->SetEncoding( encoding, guess))) {
-			wrt->_Release();
-			return sq_throwerror(v, _SC("cannot set encoding"));
+		if( top > 3) {
+			sq_getstring(v, 4, &encoding);
 		}
 	}
+
+	SQFILE wrt = sqt_textwriter( stream, owns, encoding);
+	if( wrt == NULL)
+		return sq_throwerror(v, _SC("cannot create textwriter"));
 
     if(SQ_FAILED(sq_setinstanceup(v,1,wrt))) {
-		wrt->_Release();
+		sqstd_frelease(wrt);
         return sq_throwerror(v, _SC("cannot create textwriter instance"));
     }
 
@@ -746,7 +816,7 @@ static SQInteger _textwriter_constructor(HSQUIRRELVM v)
 //bindings
 #define _DECL_TEXTWRITER_FUNC(name,nparams,typecheck) {_SC(#name),_textwriter_##name,nparams,typecheck}
 static const SQRegFunction _textwriter_methods[] = {
-    _DECL_TEXTWRITER_FUNC(constructor,-2,_SC("xxbsb")),
+    _DECL_TEXTWRITER_FUNC(constructor,-2,_SC("xxbs")),
     _DECL_TEXTWRITER_FUNC(_typeof,1,_SC("x")),
     {NULL,(SQFUNCTION)0,0,NULL}
 };
