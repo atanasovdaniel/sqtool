@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<CodeBlocks_project_file>
+	<FileVersion major="1" minor="6" />
+	<Project>
+		<Option title="sqtool" />
+		<Option makefile_is_custom="1" />
+		<Option pch_mode="2" />
+		<Option compiler="gcc" />
+		<Build>
+			<Target title="debug">
+				<Option output="build/sqtool" prefix_auto="1" extension_auto="1" />
+				<Option object_output="build_dbg/obj/" />
+				<Option type="1" />
+				<Option compiler="gcc" />
+				<Option parameters="./test/test_textio.nut" />
+				<Compiler>
+					<Add option="-g" />
+				</Compiler>
+				<MakeCommands>
+					<Build command="$make -f $makefile all config=$target" />
+					<CompileFile command="$make -f $makefile config=$target $file" />
+					<Clean command="$make -f $makefile clean config=$target" />
+					<DistClean command="$make -f $makefile distclean$target" />
+					<AskRebuildNeeded command="$make -q -f $makefile config=$target" />
+					<SilentBuild command="$make -f $makefile all config=$target &gt; $(CMD_NULL)" />
+				</MakeCommands>
+			</Target>
+			<Target title="release">
+				<Option output="build/sqtool" prefix_auto="1" extension_auto="1" />
+				<Option object_output="build/obj/" />
+				<Option type="1" />
+				<Option compiler="gcc" />
+				<Compiler>
+					<Add option="-O2" />
+				</Compiler>
+				<Linker>
+					<Add option="-s" />
+				</Linker>
+				<MakeCommands>
+					<Build command="$make -f $makefile all config=$target" />
+					<CompileFile command="$make -f $makefile $file config=$target" />
+					<Clean command="$make -f $makefile clean config=$target" />
+					<DistClean command="$make -f $makefile distclean$target" />
+					<AskRebuildNeeded command="$make -q -f $makefile config=$target" />
+					<SilentBuild command="$make -f $makefile all config=$target &gt; $(CMD_NULL)" />
+				</MakeCommands>
+			</Target>
+			<Target title="gcov">
+				<Option output="build/sqtool" prefix_auto="1" extension_auto="1" />
+				<Option object_output="build_dbg/obj/" />
+				<Option type="1" />
+				<Option compiler="gcc" />
+				<Option parameters="./test/test_textio.nut" />
+				<Compiler>
+					<Add option="-g" />
+				</Compiler>
+				<MakeCommands>
+					<Build command="$make -f $makefile all config=$target" />
+					<CompileFile command="$make -f $makefile $file config=$target" />
+					<Clean command="$make -f $makefile clean config=$target" />
+					<DistClean command="$make -f $makefile distclean$target" />
+					<AskRebuildNeeded command="$make -q -f $makefile config=$target" />
+					<SilentBuild command="$make -f $makefile all config=$target &gt; $(CMD_NULL)" />
+				</MakeCommands>
+			</Target>
+		</Build>
+		<Compiler>
+			<Add option="-Wall" />
+			<Add option="-fno-exceptions -fno-rtti -fno-strict-aliasing" />
+			<Add directory="include" />
+			<Add directory="squirrel" />
+		</Compiler>
+		<Unit filename="Makefile" />
+		<Unit filename="fs/listDir_linux_impl.h" />
+		<Unit filename="fs/listDir_win_impl.h" />
+		<Unit filename="fs/sqt_fs.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="fs/sqt_fs.h" />
+		<Unit filename="fs/stat_linux_impl.h" />
+		<Unit filename="fs/stat_win_impl.h" />
+		<Unit filename="include/sqstdblob.h" />
+		<Unit filename="include/sqstdio.h" />
+		<Unit filename="include/sqtool.h" />
+		<Unit filename="include/sqtstreamreader.h" />
+		<Unit filename="include/squirrel.h" />
+		<Unit filename="serializers/sqt_serbin.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="sqtlib/sqstdblob.cpp" />
+		<Unit filename="sqtlib/sqstdblobimpl.h" />
+		<Unit filename="sqtlib/sqstdio.cpp" />
+		<Unit filename="sqtlib/sqstdstream.cpp" />
+		<Unit filename="sqtlib/sqstdsystem.cpp" />
+		<Unit filename="sqtlib/sqt_decl.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="sqtlib/sqt_squirrelio.cpp" />
+		<Unit filename="sqtlib/sqt_streamreader.cpp" />
+		<Unit filename="sqtlib/sqt_textio.cpp" />
+		<Unit filename="sqtlib/sqt_wstr.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="sqtool/sqtool.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="sqtool/sqtool_osname.h" />
+		<Unit filename="squirrel/include/sqconfig.h" />
+		<Unit filename="squirrel/include/sqstdaux.h" />
+		<Unit filename="squirrel/include/sqstdmath.h" />
+		<Unit filename="squirrel/include/sqstdstring.h" />
+		<Unit filename="squirrel/include/sqstdsystem.h" />
+		<Unit filename="squirrel/sqstdlib/sqstdaux.cpp" />
+		<Unit filename="squirrel/sqstdlib/sqstdmath.cpp" />
+		<Unit filename="squirrel/sqstdlib/sqstdrex.cpp" />
+		<Unit filename="squirrel/sqstdlib/sqstdstring.cpp" />
+		<Unit filename="squirrel/squirrel/sqapi.cpp" />
+		<Unit filename="squirrel/squirrel/sqarray.h" />
+		<Unit filename="squirrel/squirrel/sqbaselib.cpp" />
+		<Unit filename="squirrel/squirrel/sqclass.cpp" />
+		<Unit filename="squirrel/squirrel/sqclass.h" />
+		<Unit filename="squirrel/squirrel/sqclosure.h" />
+		<Unit filename="squirrel/squirrel/sqcompiler.cpp" />
+		<Unit filename="squirrel/squirrel/sqcompiler.h" />
+		<Unit filename="squirrel/squirrel/sqdebug.cpp" />
+		<Unit filename="squirrel/squirrel/sqfuncproto.h" />
+		<Unit filename="squirrel/squirrel/sqfuncstate.cpp" />
+		<Unit filename="squirrel/squirrel/sqfuncstate.h" />
+		<Unit filename="squirrel/squirrel/sqlexer.cpp" />
+		<Unit filename="squirrel/squirrel/sqlexer.h" />
+		<Unit filename="squirrel/squirrel/sqmem.cpp" />
+		<Unit filename="squirrel/squirrel/sqobject.cpp" />
+		<Unit filename="squirrel/squirrel/sqobject.h" />
+		<Unit filename="squirrel/squirrel/sqopcodes.h" />
+		<Unit filename="squirrel/squirrel/sqpcheader.h" />
+		<Unit filename="squirrel/squirrel/sqstate.cpp" />
+		<Unit filename="squirrel/squirrel/sqstate.h" />
+		<Unit filename="squirrel/squirrel/sqstring.h" />
+		<Unit filename="squirrel/squirrel/sqtable.cpp" />
+		<Unit filename="squirrel/squirrel/sqtable.h" />
+		<Unit filename="squirrel/squirrel/squirrel.dsp" />
+		<Unit filename="squirrel/squirrel/squserdata.h" />
+		<Unit filename="squirrel/squirrel/squtils.h" />
+		<Unit filename="squirrel/squirrel/sqvm.cpp" />
+		<Unit filename="squirrel/squirrel/sqvm.h" />
+		<Extensions>
+			<code_completion />
+			<debugger />
+		</Extensions>
+	</Project>
+</CodeBlocks_project_file>

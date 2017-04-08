@@ -66,7 +66,6 @@ $(eval $(call MAKE_LIBRARY,libsqstdio.a))
 
 CXX_SOURCE_FILES+=./sqtlib/sqt_decl.c
 CXX_SOURCE_FILES+=./sqtlib/sqt_wstr.c
-CXX_SOURCE_FILES+=./sqtlib/sqt_wstr.c
 $(eval $(call MAKE_LIBRARY,libsqtool.a))
 
 #######
