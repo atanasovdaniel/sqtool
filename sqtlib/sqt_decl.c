@@ -69,7 +69,7 @@ SQInteger sqt_declareclass( HSQUIRRELVM v, const SQTClassDecl *decl)
 		else {
 			sq_newclass(v,SQFalse);							// root, new_class
 		}
-        sq_settypetag(v,-1,(SQUserPointer)decl);
+        sq_settypetag(v,-1,(SQUserPointer)(SQHash)decl);
 		sqt_declaremembers(v,decl->members);
 		sqt_declarefunctions(v,decl->methods);
 		

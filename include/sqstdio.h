@@ -22,15 +22,15 @@ extern "C" {
 #endif
 
 extern SQUIRREL_API_VAR const SQTClassDecl std_stream_decl;
-#define SQSTD_STREAM_TYPE_TAG ((SQUserPointer)&std_stream_decl)
+#define SQSTD_STREAM_TYPE_TAG ((SQUserPointer)(SQHash)&std_stream_decl)
 extern SQUIRREL_API_VAR const SQTClassDecl std_file_decl;
-#define SQSTD_FILE_TYPE_TAG ((SQUserPointer)&std_file_decl)
+#define SQSTD_FILE_TYPE_TAG ((SQUserPointer)(SQHash)&std_file_decl)
 extern SQUIRREL_API_VAR const SQTClassDecl std_popen_decl;
-#define SQSTD_POPEN_TYPE_TAG ((SQUserPointer)&std_popen_decl)
+#define SQSTD_POPEN_TYPE_TAG ((SQUserPointer)(SQHash)&std_popen_decl)
 extern SQUIRREL_API_VAR const SQTClassDecl std_textreader_decl;
-#define SQSTD_TEXTREADER_TYPE_TAG ((SQUserPointer)&std_textreader_decl)
+#define SQSTD_TEXTREADER_TYPE_TAG ((SQUserPointer)(SQHash)&std_textreader_decl)
 extern SQUIRREL_API_VAR const SQTClassDecl std_textwriter_decl;
-#define SQSTD_TEXTWRITER_TYPE_TAG ((SQUserPointer)&std_textwriter_decl)
+#define SQSTD_TEXTWRITER_TYPE_TAG ((SQUserPointer)(SQHash)&std_textwriter_decl)
 
 #define SQ_SEEK_CUR 0
 #define SQ_SEEK_END 1

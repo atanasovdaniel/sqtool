@@ -175,7 +175,7 @@ static SQInteger _file_constructor(HSQUIRRELVM v)
 		f->Open( filename, mode);
 		if( !f->IsValid())
 		{
-	        sq_free(f,sizeof(SQFile));
+			f->_Release();
 			return sq_throwerror(v, _SC("cannot open file"));
 		}
     } else if(sq_gettype(v,2) == OT_USERPOINTER) {
@@ -232,7 +232,7 @@ static SQInteger _popen_constructor(HSQUIRRELVM v)
 		f->Open( command, mode);
 		if( !f->IsValid())
 		{
-	        sq_free(f,sizeof(SQFile));
+			f->_Release();
 			return sq_throwerror(v, _SC("cannot popen command"));
 		}
     } else if(sq_gettype(v,2) == OT_USERPOINTER) {
