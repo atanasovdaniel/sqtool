@@ -51,8 +51,8 @@ SQUIRREL_API void sqstd_frelease(SQFILE);
 SQUIRREL_API SQInteger __sqstd_stream_releasehook(SQUserPointer p, SQInteger SQ_UNUSED_ARG(size));
 
 SQUIRREL_API SQFILE sqstd_fopen(const SQChar *,const SQChar *);
-SQUIRREL_API SQRESULT sqstd_createfile(HSQUIRRELVM v, SQFILE file,SQBool own);
-SQUIRREL_API SQRESULT sqstd_getfile(HSQUIRRELVM v, SQInteger idx, SQFILE *file);
+SQUIRREL_API SQRESULT sqstd_createfile(HSQUIRRELVM v, SQUserPointer file, SQBool own);
+SQUIRREL_API SQRESULT sqstd_getfile(HSQUIRRELVM v, SQInteger idx, SQUserPointer *file);
 
 SQUIRREL_API SQFILE sqstd_blob(SQInteger size);
 
@@ -60,9 +60,12 @@ SQUIRREL_API SQFILE sqt_textreader( SQFILE stream, SQBool owns, const SQChar *en
 SQUIRREL_API SQFILE sqt_textwriter( SQFILE stream, SQBool owns, const SQChar *encoding);
 
 //compiler helpers
-SQUIRREL_API SQRESULT sqt_loadfile(HSQUIRRELVM v, SQFILE file, const SQChar *filename, SQBool printerror);
-SQUIRREL_API SQRESULT sqt_dofile(HSQUIRRELVM v, SQFILE file, const SQChar *filename,SQBool retval,SQBool printerror);
-SQUIRREL_API SQRESULT sqt_writeclosure( HSQUIRRELVM v, SQFILE file);
+SQUIRREL_API SQRESULT sqt_compile_stream(HSQUIRRELVM v,SQFILE stream,const SQChar *sourcename,SQBool raiseerror);
+SQUIRREL_API SQRESULT sqt_writeclosure_stream(HSQUIRRELVM vm,SQFILE stream);
+SQUIRREL_API SQRESULT sqt_readclosure_stream(HSQUIRRELVM vm,SQFILE stream);
+SQUIRREL_API SQRESULT sqt_loadfile_stream(HSQUIRRELVM v, SQFILE stream, const SQChar *filename, SQBool printerror,
+										  SQInteger buf_size, const SQChar *encoding, SQBool guess);
+
 SQUIRREL_API SQRESULT sqstd_loadfile(HSQUIRRELVM v,const SQChar *filename,SQBool printerror);
 SQUIRREL_API SQRESULT sqstd_dofile(HSQUIRRELVM v,const SQChar *filename,SQBool retval,SQBool printerror);
 SQUIRREL_API SQRESULT sqstd_writeclosuretofile(HSQUIRRELVM v,const SQChar *filename);

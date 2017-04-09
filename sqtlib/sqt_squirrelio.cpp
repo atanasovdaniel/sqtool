@@ -7,14 +7,6 @@
 
 #define IO_BUFFER_SIZE 2048
 
-// typedef SQInteger (*SQLEXREADFUNC)(SQUserPointer);
-// typedef SQInteger (*SQWRITEFUNC)(SQUserPointer,SQUserPointer,SQInteger);
-// typedef SQInteger (*SQREADFUNC)(SQUserPointer,SQUserPointer,SQInteger);
-//
-// SQUIRREL_API SQRESULT sq_compile(HSQUIRRELVM v,SQLEXREADFUNC read,SQUserPointer p,const SQChar *sourcename,SQBool raiseerror);
-// SQUIRREL_API SQRESULT sq_writeclosure(HSQUIRRELVM vm,SQWRITEFUNC writef,SQUserPointer up);
-// SQUIRREL_API SQRESULT sq_readclosure(HSQUIRRELVM vm,SQREADFUNC readf,SQUserPointer up);
-
 static SQInteger sqt_SQLEXREADFUNC( SQUserPointer user)
 {
 	SQFILE s = (SQFILE)user;
@@ -38,56 +30,73 @@ static SQInteger sqt_SQREADFUNC( SQUserPointer user, SQUserPointer buf, SQIntege
     return -1;
 }
 
-static SQRESULT sqt_loadfile_srdr(HSQUIRRELVM v, SQT_SRDR srdr, const SQChar *filename, SQBool printerror)
+SQRESULT sqt_compile_stream(HSQUIRRELVM v,SQFILE stream,const SQChar *sourcename,SQBool raiseerror)
 {
-    SQInteger ret;
-    unsigned short us;
+	return sq_compile(v,sqt_SQLEXREADFUNC,(SQUserPointer)stream,sourcename,raiseerror);
+}
 
-    if( sqtsrdr_mark( srdr, 16) == 0) {
-		ret = sqstd_fread(&us,2,(SQFILE)srdr);
-		if(ret != 2) {
-			//probably an empty file
-			us = 0;
-		}
-		sqtsrdr_reset( srdr);
-		if(us == SQ_BYTECODE_STREAM_TAG) { //BYTECODE
-			if(SQ_SUCCEEDED(sq_readclosure(v,sqt_SQREADFUNC,srdr))) {
-				return SQ_OK;
+SQRESULT sqt_writeclosure_stream(HSQUIRRELVM vm,SQFILE stream)
+{
+	return sq_writeclosure(vm,sqt_SQWRITEFUNC,(SQUserPointer)stream);
+}
+
+SQRESULT sqt_readclosure_stream(HSQUIRRELVM vm,SQFILE stream)
+{
+	return sq_readclosure(vm,sqt_SQREADFUNC,(SQUserPointer)stream);
+}
+
+SQRESULT sqt_loadfile_stream(HSQUIRRELVM v, SQFILE stream, const SQChar *filename, SQBool printerror, SQInteger buf_size, const SQChar *encoding, SQBool guess)
+{
+	if( buf_size < 0) buf_size = IO_BUFFER_SIZE;
+	if( encoding == NULL) encoding = _SC("UTF-8");
+	SQT_SRDR srdr = sqtsrdr_create( stream, SQFalse, buf_size);
+	if( srdr != NULL) {
+		if( SQ_SUCCEEDED(sqtsrdr_mark( srdr, 16))) {
+		    unsigned short us;
+			if(sqstd_fread(&us,2,(SQFILE)srdr) != 2) {
+				//probably an empty file
+				us = 0;
 			}
-		}
-		else { //SCRIPT
-			SQFILE trdr = sqt_textreader_sr( srdr, SQFalse, SQFalse, _SC("UTF-8"), SQTrue);
-			if( trdr != NULL) {
-				if(SQ_SUCCEEDED(sq_compile( v, sqt_SQLEXREADFUNC, trdr, filename, printerror))){
-					sqstd_frelease(trdr);
+			sqtsrdr_reset( srdr);
+			if(us == SQ_BYTECODE_STREAM_TAG) { //BYTECODE
+				if(SQ_SUCCEEDED(sqt_readclosure_stream(v,(SQFILE)srdr))) {
+					sqstd_frelease( (SQFILE)srdr);
 					return SQ_OK;
 				}
-				sqstd_frelease(trdr);
+			}
+			else { //SCRIPT
+				SQFILE trdr = sqt_textreader_sr( srdr, SQFalse, SQFalse, encoding, guess);
+				if( trdr != NULL) {
+					if(SQ_SUCCEEDED(sqt_compile_stream( v, (SQFILE)trdr, filename, printerror))){
+						sqstd_frelease( trdr);
+						sqstd_frelease( (SQFILE)srdr);
+						return SQ_OK;
+					}
+					sqstd_frelease(trdr);
+				}
 			}
 		}
-    }
+		sqstd_frelease( (SQFILE)srdr);
+	}
     return sq_throwerror(v,_SC("cannot load the file"));
 }
 
-// file io
+// sq api
 
-SQRESULT sqt_loadfile(HSQUIRRELVM v, SQFILE file, const SQChar *filename, SQBool printerror)
+SQRESULT sqstd_loadfile(HSQUIRRELVM v,const SQChar *filename,SQBool printerror)
 {
-	SQRESULT r;
-	SQT_SRDR srdr;
-	
-	srdr = sqtsrdr_create( file, SQFalse, IO_BUFFER_SIZE);
-	if( srdr != NULL) {
-		r = sqt_loadfile_srdr( v, srdr, filename, printerror);
-		sqstd_frelease( (SQFILE)srdr);
+    SQFILE file = sqstd_fopen(filename,_SC("rb"));
+	if( file) {
+		SQRESULT r = sqt_loadfile_stream(v, file, filename, printerror, -1, NULL, SQTrue);
+		sqstd_frelease( file);
 		return r;
 	}
-    return sq_throwerror(v,_SC("cannot create reader"));
+    return sq_throwerror(v,_SC("cannot open the file"));
 }
 
-SQRESULT sqt_dofile(HSQUIRRELVM v, SQFILE file, const SQChar *filename,SQBool retval,SQBool printerror)
+SQRESULT sqstd_dofile(HSQUIRRELVM v,const SQChar *filename,SQBool retval,SQBool printerror)
 {
-    if(SQ_SUCCEEDED(sqt_loadfile(v,file,filename,printerror))) {
+    if(SQ_SUCCEEDED(sqstd_loadfile(v,filename,printerror))) {
         sq_push(v,-2);
         if(SQ_SUCCEEDED(sq_call(v,1,retval,SQTrue))) {
             sq_remove(v,retval?-2:-1); //removes the closure
@@ -98,45 +107,11 @@ SQRESULT sqt_dofile(HSQUIRRELVM v, SQFILE file, const SQChar *filename,SQBool re
     return SQ_ERROR;
 }
 
-SQRESULT sqt_writeclosure( HSQUIRRELVM v, SQFILE file)
-{
-    if(SQ_SUCCEEDED(sq_writeclosure(v,sqt_SQWRITEFUNC,file))) {
-        return SQ_OK;
-    }
-    return SQ_ERROR; //forward the error
-}
-
-// sq api
-
-SQRESULT sqstd_loadfile(HSQUIRRELVM v,const SQChar *filename,SQBool printerror)
-{
-    SQRESULT ret;
-    SQFILE file = sqstd_fopen(filename,_SC("rb"));
-	if( file) {
-		ret = sqt_loadfile( v, file, filename, printerror);
-		sqstd_frelease( file);
-		return ret;
-	}
-    return sq_throwerror(v,_SC("cannot open the file"));
-}
-
-SQRESULT sqstd_dofile(HSQUIRRELVM v,const SQChar *filename, SQBool retval,SQBool printerror)
-{
-    SQRESULT ret;
-    SQFILE file = sqstd_fopen(filename,_SC("rb"));
-	if( file) {
-		ret = sqt_dofile( v, file, filename, retval, printerror);
-		sqstd_frelease( file);
-		return ret;
-	}
-    return sq_throwerror(v,_SC("cannot open the file"));
-}
-
 SQRESULT sqstd_writeclosuretofile(HSQUIRRELVM v,const SQChar *filename)
 {
     SQFILE file = sqstd_fopen(filename,_SC("wb+"));
     if(!file) return sq_throwerror(v,_SC("cannot open the file"));
-    if(SQ_SUCCEEDED(sqt_writeclosure(v,file))) {
+    if(SQ_SUCCEEDED(sqt_writeclosure_stream(v,file))) {
         sqstd_frelease(file);
         return SQ_OK;
     }
@@ -148,8 +123,9 @@ SQRESULT sqstd_writeclosuretofile(HSQUIRRELVM v,const SQChar *filename)
 
 static SQInteger _g_stream_loadfile(HSQUIRRELVM v)
 {
+	SQInteger top = sq_gettop(v);
     SQBool printerror = SQFalse;
-    if(sq_gettop(v) >= 3) {
+    if(top >= 3) {
         sq_getbool(v,3,&printerror);
     }
 	if( sq_gettype(v,2) == OT_INSTANCE) {
@@ -157,8 +133,21 @@ static SQInteger _g_stream_loadfile(HSQUIRRELVM v)
 	    if( SQ_FAILED( sq_getinstanceup( v,2,(SQUserPointer*)&file,(SQUserPointer)SQSTD_STREAM_TYPE_TAG))) {
 	        return sq_throwerror(v,_SC("invalid argument type"));
 		}
-		
-		if(SQ_SUCCEEDED(sqt_loadfile(v,file,_SC("stream"),printerror)))
+		SQInteger buf_size = -1;
+		const SQChar *encoding = NULL;
+		SQBool guess = SQTrue;
+		if(top >= 4) {
+			sq_getinteger(v,4,&buf_size);
+			if(top >= 5) {
+				if( sq_gettype(v,5) == OT_STRING) {
+					sq_getstring(v,5,&encoding);
+				}
+				if(top >= 6) {
+					sq_getbool(v,6,&guess);
+				}
+			}
+		}
+		if(SQ_SUCCEEDED(sqt_loadfile_stream(v,file,_SC("stream"),printerror,buf_size,encoding,guess)))
 			return 1;
 	}
 	else {
@@ -172,27 +161,15 @@ static SQInteger _g_stream_loadfile(HSQUIRRELVM v)
 
 static SQInteger _g_stream_dofile(HSQUIRRELVM v)
 {
-    SQBool printerror = SQFalse;
-    if(sq_gettop(v) >= 3) {
-        sq_getbool(v,3,&printerror);
-    }
-    sq_push(v,1); //repush the this
-	
-	if( sq_gettype(v,2) == OT_INSTANCE) {
-		SQFILE file;
-	    if( SQ_FAILED( sq_getinstanceup( v,2,(SQUserPointer*)&file,(SQUserPointer)SQSTD_STREAM_TYPE_TAG))) {
-	        return sq_throwerror(v,_SC("invalid argument type"));
-		}
-		if(SQ_SUCCEEDED(sqt_dofile(v,file,_SC("stream"),SQTrue,printerror)))
-			return 1;
+	if( SQ_SUCCEEDED(_g_stream_loadfile(v))) {
+	    sq_push(v,1); //repush the this
+        if(SQ_SUCCEEDED(sq_call(v,1,SQTrue,SQTrue))) {
+            sq_remove(v,-2); //removes the closure
+            return 1;
+        }
+        sq_pop(v,1); //removes the closure
 	}
-	else {
-		const SQChar *filename;
-		sq_getstring(v,2,&filename);
-		if(SQ_SUCCEEDED(sqstd_dofile(v,filename,SQTrue,printerror)))
-			return 1;
-	}
-    return SQ_ERROR; //propagates the error
+	return SQ_ERROR;
 }
 
 static SQInteger _g_stream_writeclosuretofile(HSQUIRRELVM v)
@@ -202,7 +179,7 @@ static SQInteger _g_stream_writeclosuretofile(HSQUIRRELVM v)
 	    if( SQ_FAILED( sq_getinstanceup( v,2,(SQUserPointer*)&file,(SQUserPointer)SQSTD_STREAM_TYPE_TAG))) {
 	        return sq_throwerror(v,_SC("invalid argument type"));
 		}
-		if(SQ_SUCCEEDED(sqt_writeclosure(v,file)))
+		if(SQ_SUCCEEDED(sqt_writeclosure_stream(v,file)))
 			return 1;
 	}
 	else {
@@ -216,8 +193,8 @@ static SQInteger _g_stream_writeclosuretofile(HSQUIRRELVM v)
 
 #define _DECL_GLOBALSTREAM_FUNC(name,nparams,typecheck) {_SC(#name),_g_stream_##name,nparams,typecheck}
 static const SQRegFunction _stream_funcs[]={
-    _DECL_GLOBALSTREAM_FUNC(loadfile,-2,_SC(".s|xb")),
-    _DECL_GLOBALSTREAM_FUNC(dofile,-2,_SC(".s|xb")),
+    _DECL_GLOBALSTREAM_FUNC(loadfile,-2,_SC(".s|xbio|sb")),
+    _DECL_GLOBALSTREAM_FUNC(dofile,-2,_SC(".s|xbio|sb")),
     _DECL_GLOBALSTREAM_FUNC(writeclosuretofile,3,_SC(".s|xc")),
     {NULL,(SQFUNCTION)0,0,NULL}
 };
