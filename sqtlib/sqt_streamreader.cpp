@@ -153,12 +153,10 @@ SQT_SRDR sqtsrdr_create( SQFILE stream, SQBool owns, SQInteger buffer_size)
 	SQTStreamReader *srdr;
 
     srdr = new (sq_malloc(sizeof(SQTStreamReader)))SQTStreamReader( (SQStream*)stream, owns, buffer_size);
-	if( srdr->IsValid())
-	{
+	if( srdr->IsValid()) {
 		return (SQT_SRDR)srdr;
 	}
-	else
-	{
+	else {
 		srdr->_Release();
 		return NULL;
 	}
@@ -272,12 +270,9 @@ const SQTClassDecl sqt_streamrdr_decl = {
 
 SQUIRREL_API SQRESULT sqstd_register_streamrdr(HSQUIRRELVM v)
 {
-	if(SQ_FAILED(sqt_declareclass(v,&sqt_streamrdr_decl)))
-	{
+	if(SQ_FAILED(sqt_declareclass(v,&sqt_streamrdr_decl))) {
 		return SQ_ERROR;
 	}
  	sq_poptop(v);
 	return SQ_OK;
 }
-
-
