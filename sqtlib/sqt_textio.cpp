@@ -171,24 +171,28 @@ struct TextConverter
 
 	SQInteger Read_UTF8( uint32_t *pwc)
 	{
-		uint8_t c;
-		if( SQ_FAILED(BytesReadU8( &c))) return SQ_ERROR;		// EOF (SQCCV_TOOFEW)
-		if( c < 0x80) { *pwc = c; return SQ_OK; }
-		//else if( c < 0xC2) { *pwc = _bad_char; return SQTC_ILSEQ; }	// SQCCV_ILSEQ
-		else if( c < 0xC0) { *pwc = _bad_char; return SQTC_ILSEQ; }	// SQCCV_ILSEQ
-		else {
-			SQInteger codelen = utf8_lengths[ c >> 4];
-			SQInteger n = codelen;
-			uint32_t wc = c & utf8_byte_masks[codelen];
-			while( --n) {
-				if( SQ_FAILED(BytesReadU8( &c))) { return SQTC_TOOFEW; }		// EOF (SQCCV_TOOFEW)
-				if( (c & 0xC0) != 0x80) { *pwc = _bad_char; return SQTC_ILSEQ; }	// SQCCV_ILSEQ
-				wc <<= 6; wc |= c & 0x3F;
-			}
-			if( wc < utf8_min_codept[codelen]) { *pwc = _bad_char; return SQTC_ILSEQ; }	// SQCCV_ILSEQ
-			*pwc = wc;
-			return SQ_OK;
-		}
+        while(1) {
+            uint8_t c;
+            if( SQ_FAILED(BytesReadU8( &c))) return SQ_ERROR;		// EOF (SQCCV_TOOFEW)
+            if( c < 0x80) { *pwc = c; return SQ_OK; }
+            //else if( c < 0xC2) { *pwc = _bad_char; return SQTC_ILSEQ; }	// SQCCV_ILSEQ
+            else if( c < 0xC0) { *pwc = _bad_char; return SQTC_ILSEQ; }	// SQCCV_ILSEQ
+            else {
+                SQInteger codelen = utf8_lengths[ c >> 4];
+                SQInteger n = codelen;
+                uint32_t wc = c & utf8_byte_masks[codelen];
+                while( --n) {
+                    if( SQ_FAILED(BytesReadU8( &c))) { return SQTC_TOOFEW; }		// EOF (SQCCV_TOOFEW)
+                    if( (c & 0xC0) != 0x80) { *pwc = _bad_char; return SQTC_ILSEQ; }	// SQCCV_ILSEQ
+                    wc <<= 6; wc |= c & 0x3F;
+                }
+                if( wc < utf8_min_codept[codelen]) { *pwc = _bad_char; return SQTC_ILSEQ; }	// SQCCV_ILSEQ
+                if( wc != 0xFEFF) {
+                    *pwc = wc;
+                    return SQ_OK;
+                }
+            }
+        }
 	}
 
 	SQInteger Write_UTF8( uint32_t wc)
@@ -316,7 +320,7 @@ static encodings_list_t encodings_list[] = {
 static int compare_encoding_name( const SQChar *iname, const SQChar *oname)
 {
 	SQChar i, o;
-	while( ((i = *iname)!=_SC('\0')) & ((o = *oname)!=_SC('\0'))) {		// both i and o must be read
+	while( ((i = *iname)!=_SC('\0')) & ((o = *oname)!=_SC('\0'))) {		// & - both i and o must be read
 		if( !(i==o) && !(i>=_SC('A') && (i^o)==0x20)
 		  && !( i==_SC('-') && o==_SC('_')) ) {
 			if( i==_SC('-'))
@@ -337,7 +341,7 @@ static const encodings_list_tag *find_encoding( const SQChar *name)
 	while( enc->names) {
 		const SQChar **pname = enc->names;
 		while( *pname) {
-			if( compare_encoding_name( name, *pname) == 0) {
+			if( compare_encoding_name( *pname, name) == 0) {
 				return enc;
 			}
 			pname++;
