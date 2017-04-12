@@ -48,7 +48,7 @@ struct SQFile : public SQStream {
     SQInteger Read(void *buffer,SQInteger size) {
 	    return (SQInteger)fread( buffer, 1, size, _handle);
     }
-    SQInteger Write(void *buffer,SQInteger size) {
+    SQInteger Write(const void *buffer,SQInteger size) {
 	    return (SQInteger)fwrite( buffer, 1, size, _handle);
     }
     SQInteger Flush() {
@@ -69,10 +69,12 @@ struct SQFile : public SQStream {
     }
     SQInteger Len() {
         SQInteger prevpos=Tell();
-        Seek(0,SQ_SEEK_END);
-        SQInteger size=Tell();
-        Seek(prevpos,SQ_SEEK_SET);
-        return size;
+        if( Seek(0,SQ_SEEK_END) == 0) {
+			SQInteger size=Tell();
+			Seek(prevpos,SQ_SEEK_SET);
+			return size;
+		}
+		return -1;
     }
     bool IsValid() { return _handle ? true : false; }
     bool EOS() { return feof( _handle); }
