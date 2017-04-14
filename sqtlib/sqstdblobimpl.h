@@ -23,7 +23,7 @@ struct SQBlob : public SQStream
 		this->~SQBlob();
 		sq_free(this,sizeof(SQBlob));
 	}
-    SQInteger Write(void *buffer, SQInteger size) {
+    SQInteger Write(const void *buffer, SQInteger size) {
         if(!CanAdvance(size)) {
             GrowBufOf(_ptr + size - _size);
         }

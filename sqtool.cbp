@@ -12,7 +12,7 @@
 				<Option object_output="build_dbg/obj/" />
 				<Option type="1" />
 				<Option compiler="gcc" />
-				<Option parameters="./test/test_sqio.nut" />
+				<Option parameters="./test/test_staticarray.nut" />
 				<Compiler>
 					<Add option="-g" />
 				</Compiler>
@@ -143,6 +143,7 @@
 		<Unit filename="squirrel/squirrel/squtils.h" />
 		<Unit filename="squirrel/squirrel/sqvm.cpp" />
 		<Unit filename="squirrel/squirrel/sqvm.h" />
+		<Unit filename="vectors/staticarray.cpp" />
 		<Extensions>
 			<code_completion />
 			<debugger />

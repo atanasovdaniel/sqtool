@@ -451,7 +451,7 @@ struct SQTextReader : public SQStream
 		return _converter.SetReadEncoding( encoding);
 	}
 
-    SQInteger Write(void *buffer, SQInteger size) { return -1; }
+    SQInteger Write(const void *buffer, SQInteger size) { return -1; }
     SQInteger Flush() { return 0; }
     SQInteger Tell() { return -1; }
     SQInteger Len() { return -1; }
@@ -629,7 +629,7 @@ struct SQTextWriter : public SQStream
 #endif // SQUNICODE
 	}
 
-    SQInteger Write(void *buffer, SQInteger size) {
+    SQInteger Write(const void *buffer, SQInteger size) {
 		SQInteger total = 0;
 		_in_buf = (uint8_t*)buffer;
 		_in_size = size;

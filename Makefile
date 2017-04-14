@@ -75,6 +75,12 @@ $(eval $(call SOURCE_FOLDER,./fs))
 $(eval $(call MAKE_LIBRARY,libfs.a))
 
 #######
+# Statis arrays
+
+$(eval $(call SOURCE_FOLDER,./vectors))
+$(eval $(call MAKE_LIBRARY,libvect.a))
+
+#######
 # List of libraryes
 
 $(LIB_DIR)/symbols.txt: $(LIBRARY_FILES)
