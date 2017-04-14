@@ -33,7 +33,7 @@ struct SQTStreamReader : public SQStream
 
     void SetStream( SQStream *stream, SQBool owns) { Close(); _stream = stream; _owns = owns; };
 
-    SQInteger Write(void *buffer, SQInteger size) { return -1; };
+    SQInteger Write(const void *buffer, SQInteger size) { return -1; };
     SQInteger Flush()	{ return 0; };
     SQInteger Tell()	{ return -1; };
     SQInteger Len()		{ return -1; };
