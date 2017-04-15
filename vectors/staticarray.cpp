@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <squirrel.h>
+#include <sqt_basictypes.h>
 #include <sqtool.h>
 
 extern "C" {
@@ -16,15 +17,127 @@ extern "C" {
 
 #define SQTSA_OWNS_DATA 0x800
 #define SQTSA_OWNS_DIMS 0x400
-#define SQTSA_IS_FLOAT  0x200
-#define SQTSA_IS_SIGNED 0x100
 #define SQTSA_OWNS_MASK (SQTSA_OWNS_DATA | SQTSA_OWNS_DIMS)
-#define SQTSA_TYPE_MASK (SQTSA_IS_FLOAT | SQTSA_IS_SIGNED)
-#define SQTSA_SIZE_MASK 0x0FF
 
 static HSQMEMBERHANDLE sa__up_handle;
 
+struct SQTStatcArray
+{
+    SQUserPointer _data;
+    const SQInteger *_dims;
+    SQInteger _flags;
+    SQInteger _elem_size;
+    const SQTBasicTypeDef *_type;
+    
+    SQTStatcArray( const SQTBasicTypeDef *type, SQUserPointer data, const SQInteger *dims, SQInteger flags)
+    {
+        _data = data;
+        _dims = dims;
+        _flags = flags;
+        _type = type;
+        _elem_size = 0;
+        _elem_size = get_elem_size();
+        if( flags & SQTSA_OWNS_DIMS) {
+            SQInteger len = (1 + get_dims_count()) * sizeof(SQInteger);
+            SQUserPointer tmp = sq_malloc( len);
+            memcpy( tmp, dims, len);
+            _dims = (SQInteger*)tmp;
+        }
+        if( flags & SQTSA_OWNS_DATA) {
+            SQInteger len = get_data_size();
+            _data = sq_malloc( len);
+            if( data != NULL) {
+                memcpy( _data, data, len);
+            }
+        }
+    }
+    
+    ~SQTStatcArray()
+    {
+        if( _data && (_flags & SQTSA_OWNS_DATA)) {
+            sq_free( _data, get_data_size());
+        }
+        if( _dims && (_flags & SQTSA_OWNS_DIMS)) {
+            sq_free( (SQUserPointer)(SQHash)_dims, (1 + get_dims_count()) * sizeof(SQInteger));
+        }
+        _flags = 0;
+    }
+    
+    void _Release() {
+        this->~SQTStatcArray();
+        sq_free( this, sizeof(SQTStatcArray));
+    }
+    
+    static SQTStatcArray* Create( const SQTBasicTypeDef *type, SQUserPointer data, const SQInteger *dims, SQInteger flags)
+    {
+        return new (sq_malloc(sizeof(SQTStatcArray)))SQTStatcArray(type,data,dims,flags);
+    }
+    
+    SQTStatcArray* CreateSame( SQUserPointer data, const SQInteger *dims, SQInteger flags) const
+    {
+        return Create(_type,data,dims,flags);
+    }
+    
+    SQBool IsValid() const { return _type && _data && _dims && _dims[0]; }
+    
+    SQInteger GetValueSize() const { return _type->size; }
+    
+    SQRESULT ValueGet( HSQUIRRELVM v, const SQUserPointer data) const
+    {
+        _type->push(v, data);
+        return SQ_OK;
+    }
+    
+    // pops value from stack
+    SQRESULT ValueSet( HSQUIRRELVM v, SQUserPointer data) const
+    {
+        if( SQ_FAILED(_type->get(v, -1, data))) return SQ_ERROR;
+        sq_poptop(v);
+        return SQ_OK;
+    }
 
+    SQInteger get_dims_count() const
+    {
+        const SQInteger *d = _dims;
+        SQInteger count = 0;
+        while( *d != 0) {
+            count++;
+            d++;
+        }
+        return count;
+    }
+    
+    SQInteger get_data_size() const
+    {
+        if( _dims[0]) {
+            const SQInteger *d = _dims;
+            SQInteger size = GetValueSize();
+            while( *d != 0) {
+                size *= *d;
+                d++;
+            }
+            return size;
+        }
+        return 0;
+    }
+    
+    SQInteger get_elem_size() const
+    {
+        if( _elem_size) return _elem_size;
+        if( _dims[0] && _dims[1]) {
+            const SQInteger *d = _dims + 1;
+            SQInteger size = GetValueSize();
+            while( *d != 0) {
+                size *= *d;
+                d++;
+            }
+            return size;
+        }
+        return 0;
+    }
+};
+
+/*
 struct SQTStatcArray
 {
     SQUserPointer _data;
@@ -140,6 +253,7 @@ struct SQTStatcArray
         return 0;
     }
 };
+*/
 
 static SQInteger _staticarray_releasehook(SQUserPointer p, SQInteger SQ_UNUSED_ARG(size))
 {
@@ -147,7 +261,7 @@ static SQInteger _staticarray_releasehook(SQUserPointer p, SQInteger SQ_UNUSED_A
     sa->_Release();
     return 1;
 }
-
+/*
 #define _STARRAY_DEF_BEGIN( _st_name) \
 struct _st_name : public SQTStatcArray \
 { \
@@ -214,7 +328,7 @@ _STARRAY_DEF_BEGIN( SQTStatcArray_double)
     }
     
 _STARRAY_DEF_END()
-
+*/
 /*
 struct SQTStatcArray_double : public SQTStatcArray
 {
@@ -360,12 +474,12 @@ static SQInteger _staticarray_constructor(HSQUIRRELVM v)
         if( sq_gettype(v,2) != OT_INTEGER) {
             return sq_throwerror(v, _SC("bad argument type"));
         }
-        SQInteger ndims = top - 2 + 1;
+        SQInteger ndims = top - 2;
         SQInteger *dims = (SQInteger*)sq_getscratchpad(v, (ndims+1)*sizeof(SQInteger));
         SQInteger n;
     
         dims[ndims] = 0;
-        for( n=0; n < (ndims-1); n++) {
+        for( n=0; n < ndims; n++) {
             SQInteger p=n+3;
             if( sq_gettype(v,p) == OT_INTEGER) {
                 sq_getinteger(v,p,&dims[n]);
@@ -380,26 +494,9 @@ static SQInteger _staticarray_constructor(HSQUIRRELVM v)
     
         SQInteger type_id;
         sq_getinteger(v,2,&type_id);
-    
-        switch( type_id) {
-            case 'l':   // processor dependent, 32bits on 32bits processors, 64bits on 64bits processors
-            case 's':   // 16bits signed integer
-            case 'w':   // 16bits unsigned integer
-            case 'c':   // 8bits signed integer
-            case 'b':   // 8bits unsigned integer
-            case 'f':   // 32bits float
-            default: return sq_throwerror(v, _SC("unknown type id"));
-        
-            case 'i':   // 32bits number
-                dims[ndims-1] = SQTStatcArray_int32::ValueSize;
-                sa = SQTStatcArray_int32::Create( NULL, dims, SQTSA_OWNS_DATA | SQTSA_OWNS_DIMS);
-                break;
-            
-            case 'd':   // 64bits float
-                dims[ndims-1] = SQTStatcArray_double::ValueSize;
-                sa = SQTStatcArray_double::Create( NULL, dims, SQTSA_OWNS_DATA | SQTSA_OWNS_DIMS);
-                break;
-        }
+        const SQTBasicTypeDef *bt = sqt_basictypebyid( type_id);
+        if( bt == NULL) return sq_throwerror(v, _SC("unknown type id"));
+        sa = SQTStatcArray::Create( bt, NULL, dims, SQTSA_OWNS_DATA | SQTSA_OWNS_DIMS);
     }
     
     if( !sa->IsValid()) {
@@ -449,7 +546,7 @@ static SQInteger _staticarray__set(HSQUIRRELVM v)
     sq_getinteger(v,2,&index);
     SQUserPointer data = ((uint8_t*)self->_data) + index * self->_elem_size;
     if( (index < 0) || (index >= self->_dims[0])) return sq_throwerror(v,_SC("index out of range"));
-    if( self->_dims[2]) {
+    if( self->_dims[1]) {
         SQObjectType ot = sq_gettype(v,3);
         if( ot == OT_ARRAY) {
         }

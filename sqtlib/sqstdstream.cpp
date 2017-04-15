@@ -8,6 +8,7 @@
 #include <sqtool.h>
 #include <sqstdio.h>
 #include <sqstdblob.h>
+#include <sqt_basictypes.h>
 #include "sqstdstream.h"
 //#include "sqstdblobimpl.h"
 
@@ -126,64 +127,19 @@ SQInteger _stream_readline(HSQUIRRELVM v)
 	return 1;
 }
 
-#define SAFE_READN(ptr,len) { \
-    if(self->Read(ptr,len) != len) return sq_throwerror(v,_SC("io error")); \
-    }
 SQInteger _stream_readn(HSQUIRRELVM v)
 {
+    unsigned char tmp[SQT_BASICTYPES_MAXSIZE];
     SETUP_STREAM(v);
     SQInteger format;
     sq_getinteger(v, 2, &format);
-    switch(format) {
-    case 'l': {
-        SQInteger i;
-        SAFE_READN(&i, sizeof(i));
-        sq_pushinteger(v, i);
-              }
-        break;
-    case 'i': {
-        SQInt32 i;
-        SAFE_READN(&i, sizeof(i));
-        sq_pushinteger(v, i);
-              }
-        break;
-    case 's': {
-        short s;
-        SAFE_READN(&s, sizeof(short));
-        sq_pushinteger(v, s);
-              }
-        break;
-    case 'w': {
-        unsigned short w;
-        SAFE_READN(&w, sizeof(unsigned short));
-        sq_pushinteger(v, w);
-              }
-        break;
-    case 'c': {
-        char c;
-        SAFE_READN(&c, sizeof(char));
-        sq_pushinteger(v, c);
-              }
-        break;
-    case 'b': {
-        unsigned char c;
-        SAFE_READN(&c, sizeof(unsigned char));
-        sq_pushinteger(v, c);
-              }
-        break;
-    case 'f': {
-        float f;
-        SAFE_READN(&f, sizeof(float));
-        sq_pushfloat(v, f);
-              }
-        break;
-    case 'd': {
-        double d;
-        SAFE_READN(&d, sizeof(double));
-        sq_pushfloat(v, (SQFloat)d);
-              }
-        break;
-    default:
+    const SQTBasicTypeDef *bt = sqt_basictypebyid( format);
+    if( bt != NULL) {
+        if(self->Read(tmp,bt->size) != bt->size)
+            return sq_throwerror(v,_SC("io error"));
+        bt->push(v,tmp);
+    }
+    else {
         return sq_throwerror(v, _SC("invalid format"));
     }
     return 1;
@@ -218,68 +174,16 @@ SQInteger _stream_print(HSQUIRRELVM v)
 
 SQInteger _stream_writen(HSQUIRRELVM v)
 {
+    unsigned char tmp[SQT_BASICTYPES_MAXSIZE];
     SETUP_STREAM(v);
-    SQInteger format, ti;
-    SQFloat tf;
+    SQInteger format;
     sq_getinteger(v, 3, &format);
-    switch(format) {
-    case 'l': {
-        SQInteger i;
-        sq_getinteger(v, 2, &ti);
-        i = ti;
-        self->Write(&i, sizeof(SQInteger));
-              }
-        break;
-    case 'i': {
-        SQInt32 i;
-        sq_getinteger(v, 2, &ti);
-        i = (SQInt32)ti;
-        self->Write(&i, sizeof(SQInt32));
-              }
-        break;
-    case 's': {
-        short s;
-        sq_getinteger(v, 2, &ti);
-        s = (short)ti;
-        self->Write(&s, sizeof(short));
-              }
-        break;
-    case 'w': {
-        unsigned short w;
-        sq_getinteger(v, 2, &ti);
-        w = (unsigned short)ti;
-        self->Write(&w, sizeof(unsigned short));
-              }
-        break;
-    case 'c': {
-        char c;
-        sq_getinteger(v, 2, &ti);
-        c = (char)ti;
-        self->Write(&c, sizeof(char));
-                  }
-        break;
-    case 'b': {
-        unsigned char b;
-        sq_getinteger(v, 2, &ti);
-        b = (unsigned char)ti;
-        self->Write(&b, sizeof(unsigned char));
-              }
-        break;
-    case 'f': {
-        float f;
-        sq_getfloat(v, 2, &tf);
-        f = (float)tf;
-        self->Write(&f, sizeof(float));
-              }
-        break;
-    case 'd': {
-        double d;
-        sq_getfloat(v, 2, &tf);
-        d = tf;
-        self->Write(&d, sizeof(double));
-              }
-        break;
-    default:
+    const SQTBasicTypeDef *bt = sqt_basictypebyid( format);
+    if( bt != NULL) {
+        if( SQ_FAILED(bt->get(v,2,tmp))) return SQ_ERROR;
+        if( self->Write(tmp, bt->size) != bt->size) return sq_throwerror(v,_SC("io error"));
+    }
+    else {
         return sq_throwerror(v, _SC("invalid format"));
     }
     return 0;
