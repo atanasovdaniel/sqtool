@@ -81,6 +81,7 @@
 		<Unit filename="fs/stat_win_impl.h" />
 		<Unit filename="include/sqstdblob.h" />
 		<Unit filename="include/sqstdio.h" />
+		<Unit filename="include/sqt_basictypes.h" />
 		<Unit filename="include/sqtool.h" />
 		<Unit filename="include/sqtstreamreader.h" />
 		<Unit filename="include/squirrel.h" />
@@ -92,6 +93,9 @@
 		<Unit filename="sqtlib/sqstdio.cpp" />
 		<Unit filename="sqtlib/sqstdstream.cpp" />
 		<Unit filename="sqtlib/sqstdsystem.cpp" />
+		<Unit filename="sqtlib/sqt_basictypes.c">
+			<Option compilerVar="CC" />
+		</Unit>
 		<Unit filename="sqtlib/sqt_decl.c">
 			<Option compilerVar="CC" />
 		</Unit>
@@ -143,7 +147,6 @@
 		<Unit filename="squirrel/squirrel/squtils.h" />
 		<Unit filename="squirrel/squirrel/sqvm.cpp" />
 		<Unit filename="squirrel/squirrel/sqvm.h" />
-		<Unit filename="vectors/staticarray.cpp" />
 		<Extensions>
 			<code_completion />
 			<debugger />
