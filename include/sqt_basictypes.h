@@ -5,18 +5,13 @@
 extern "C" {
 #endif
 
-#define SQT_BASICTYPES_MAXSIZE  16
+typedef struct tagSQTBasicTypeDef SQTBasicTypeDef;
 
-typedef void (*sqt_basicpush_fct)(HSQUIRRELVM v,const SQUserPointer p);
-typedef SQRESULT (*sqt_basicget_fct)(HSQUIRRELVM v, SQInteger idx, SQUserPointer p);
-
-typedef struct tagSQTBasicTypeDef {
-    const sqt_basicpush_fct push;
-    const sqt_basicget_fct get;
-    SQInteger size;
-    SQInteger align;
-    const SQChar *name;
-} SQTBasicTypeDef;
+SQUIRREL_API SQInteger sqt_basicsize( const SQTBasicTypeDef *bt);
+SQUIRREL_API SQInteger sqt_basicalign( const SQTBasicTypeDef *bt);
+SQUIRREL_API void sqt_basicpush( const SQTBasicTypeDef *bt, HSQUIRRELVM v, const SQUserPointer p);
+SQUIRREL_API SQRESULT sqt_basicget( const SQTBasicTypeDef *bt, HSQUIRRELVM v, SQInteger idx, SQUserPointer p);
+//SQUIRREL_API SQRESULT sqt_basicrefmember( const SQTBasicTypeDef *bt, HSQUIRRELVM v);
 
 extern SQUIRREL_API_VAR const SQTBasicTypeDef SQ_Basic_uint8_t;
 extern SQUIRREL_API_VAR const SQTBasicTypeDef SQ_Basic_int8_t;

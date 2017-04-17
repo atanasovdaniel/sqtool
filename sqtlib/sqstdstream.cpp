@@ -129,15 +129,16 @@ SQInteger _stream_readline(HSQUIRRELVM v)
 
 SQInteger _stream_readn(HSQUIRRELVM v)
 {
-    unsigned char tmp[SQT_BASICTYPES_MAXSIZE];
     SETUP_STREAM(v);
     SQInteger format;
     sq_getinteger(v, 2, &format);
     const SQTBasicTypeDef *bt = sqt_basictypebyid( format);
     if( bt != NULL) {
-        if(self->Read(tmp,bt->size) != bt->size)
+        SQInteger size = sqt_basicsize(bt);
+        SQUserPointer tmp = sq_getscratchpad(v,size);
+        if(self->Read(tmp,size) != size)
             return sq_throwerror(v,_SC("io error"));
-        bt->push(v,tmp);
+        sqt_basicpush(bt,v,tmp);
     }
     else {
         return sq_throwerror(v, _SC("invalid format"));
@@ -174,14 +175,15 @@ SQInteger _stream_print(HSQUIRRELVM v)
 
 SQInteger _stream_writen(HSQUIRRELVM v)
 {
-    unsigned char tmp[SQT_BASICTYPES_MAXSIZE];
     SETUP_STREAM(v);
     SQInteger format;
     sq_getinteger(v, 3, &format);
     const SQTBasicTypeDef *bt = sqt_basictypebyid( format);
     if( bt != NULL) {
-        if( SQ_FAILED(bt->get(v,2,tmp))) return SQ_ERROR;
-        if( self->Write(tmp, bt->size) != bt->size) return sq_throwerror(v,_SC("io error"));
+        SQInteger size = sqt_basicsize(bt);
+        SQUserPointer tmp = sq_getscratchpad(v,size);
+        if( SQ_FAILED(sqt_basicget(bt,v,2,tmp))) return SQ_ERROR;
+        if( self->Write(tmp, size) != size) return sq_throwerror(v,_SC("io error"));
     }
     else {
         return sq_throwerror(v, _SC("invalid format"));
