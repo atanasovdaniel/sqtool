@@ -16,15 +16,13 @@ extern SQUIRREL_API_VAR const SQTClassDecl sqt_basicvalue_decl;
 extern SQUIRREL_API_VAR const SQTClassDecl sqt_basicarray_decl;
 #define SQT_BASICARRAY_TYPE_TAG ((SQUserPointer)(SQHash)&sqt_basicarray_decl)
 
-typedef void (*sqt_basicpush_fct)(const SQTBasicTypeDef *bt, HSQUIRRELVM v,const SQUserPointer p);
+typedef void (*sqt_basicpush_fct)(const SQTBasicTypeDef *bt, HSQUIRRELVM v, SQUserPointer p);
 typedef SQRESULT (*sqt_basicget_fct)(const SQTBasicTypeDef *bt, HSQUIRRELVM v, SQInteger idx, SQUserPointer p);
-//typedef SQRESULT (*sqt_basicrefmember_fct)(const SQTBasicTypeDef *bt, HSQUIRRELVM v, SQInteger idx);
 
 struct tagSQTBasicTypeDef
 {
     sqt_basicpush_fct push;
     sqt_basicget_fct get;
-//    const sqt_basicrefmember_fct refmember;
     SQInteger size;
     SQInteger align;
     const SQChar *name;
@@ -38,7 +36,7 @@ SQInteger sqt_basicalign( const SQTBasicTypeDef *bt)
 {
     return bt->align;
 }
-void sqt_basicpush( const SQTBasicTypeDef *bt, HSQUIRRELVM v, const SQUserPointer p)
+void sqt_basicpush( const SQTBasicTypeDef *bt, HSQUIRRELVM v, SQUserPointer p)
 {
     bt->push( bt, v, p);
 }
@@ -46,12 +44,7 @@ SQRESULT sqt_basicget( const SQTBasicTypeDef *bt, HSQUIRRELVM v, SQInteger idx, 
 {
     return bt->get( bt, v, idx, p);
 }
-/*
-SQRESULT sqt_basicrefmember( const SQTBasicTypeDef *bt, HSQUIRRELVM v)
-{
-    return bt->refmember ? bt->refmember( bt, v) : sq_throwerror(v, _SC("basictype don't have members"));
-}
-*/
+
 const SQTBasicTypeDef *sqt_basictypebyid( SQInteger id)
 {
     switch(id) {
@@ -104,7 +97,6 @@ MK_BASE( int64_t, SQInteger, sq_pushinteger, sq_getinteger)
 MK_BASE( float, SQFloat, sq_pushfloat, sq_getfloat)
 MK_BASE( double, SQFloat, sq_pushfloat, sq_getfloat)
 
-
 /* ------------------------------------
     Basic type
 ------------------------------------ */
@@ -132,82 +124,72 @@ static SQInteger _basic__typeof(HSQUIRRELVM v)
     return 1;
 }
 
-/*
-static SQInteger _basic_refmember(HSQUIRRELVM v)
-{
-    sq_pushstring(v,sqt_basictype_decl.name,-1);
-    return 1;
-}
-*/
-
 #define _DECL_BASICTYPE_FUNC(name,nparams,typecheck) {_SC(#name),_basic_##name,nparams,typecheck}
-static const SQRegFunction _cv_methods[] = {
+static const SQRegFunction _type_methods[] = {
     _DECL_BASICTYPE_FUNC(constructor,2,_SC("xp")),
     _DECL_BASICTYPE_FUNC(_typeof,1,_SC("x")),
-//    _DECL_BASICTYPE_FUNC(refmember,1,_SC("xp|ui.")), // type, ptr, offset, index
     {NULL,(SQFUNCTION)0,0,NULL}
 };
 
 const SQTClassDecl sqt_basictype_decl = {
-	NULL,				// base_class
+	NULL,                   // base_class
     _SC("sqt_basictype"),	// reg_name
     _SC("basictype"),		// name
-	NULL,               // members
-	_cv_methods,        // methods
-	NULL,               // globals
+	NULL,                   // members
+	_type_methods,          // methods
+	NULL,                   // globals
 };
 
 /* ------------------------------------
     Array type
 ------------------------------------ */
 
-/*
 typedef struct tagSQTBasicArrayTypeDef {
     SQTBasicTypeDef b;
     const SQTBasicTypeDef *oftype;
     SQInteger length;
 } SQTBasicArrayTypeDef;
 
-#define SETUP_ARRAY(v) \
-    SQTBasicArrayTypeDef *self = NULL; \
-    if(SQ_FAILED(sq_getinstanceup(v,1,(SQUserPointer*)&self,(SQUserPointer)SQT_BASICARRAY_TYPE_TAG))) \
-        return sq_throwerror(v,_SC("invalid type tag"));
-*/
-
 static HSQMEMBERHANDLE _array_type_oftype;
 
-static void sq_pushbasic_array(const SQTBasicTypeDef *bt, HSQUIRRELVM v,const SQUserPointer p)
+static void sq_pushbasic_array(const SQTBasicTypeDef *bt, HSQUIRRELVM v, SQUserPointer p)
 {
+    const SQTBasicArrayTypeDef *self = (const SQTBasicArrayTypeDef*)bt;
+    SQInteger elsize = sqt_basicsize( self->oftype);
+    SQInteger idx = 0;
+    sq_newarray(v,self->length);            // array
+    while( idx < self->length) {
+        sq_pushinteger(v,idx);              // array, index
+        sqt_basicpush( self->oftype, v, p); // array, index, value
+        sq_set(v,-3);                       // array
+        p = (uint8_t*)p + elsize;
+        idx++;
+    }
 }
 
 static SQRESULT sq_getbasic_array(const SQTBasicTypeDef *bt, HSQUIRRELVM v, SQInteger idx, SQUserPointer p)
 {
-    return SQ_ERROR;
-}
-
-/*
-static SQRESULT sq_refmember_array(const SQTBasicTypeDef *bt, HSQUIRRELVM v, SQInteger idx)
-{
-    SQTBasicArrayTypeDef *at = (SQTBasicArrayTypeDef*)bt;
-    // value, index
-    SQInteger index;
-    if(SQ_FAILED(sq_getinteger(v,-1,&index)))
-        return sq_throwerror(v,_SC("bad index type"));
-    if( (index < 0) || (index >= at->length))
-        return sq_throwerror(v,_SC("index out of range"));
-    SQInteger offset;
-    sq_getbyhandle(v,-2,&_value_offset_handle);
-    sq_getinteger(v,-1,&offset);
+    const SQTBasicArrayTypeDef *self = (const SQTBasicArrayTypeDef*)bt;
+    SQInteger length;
+    SQInteger elsize;
+    idx = (idx > 0) ? idx : sq_gettop(v) + idx + 1;
+    if(sq_gettype(v,idx) != OT_ARRAY) return sq_throwerror(v,_SC("expecting array"));
+    length = sq_getsize(v,idx);
+    if(length != self->length) return sq_throwerror(v,_SC("array size don't match"));
+    elsize = sqt_basicsize( self->oftype);
+    sq_pushnull(v);
+    while(SQ_SUCCEEDED(sq_next(v,idx))) {
+        if(SQ_FAILED(sqt_basicget( self->oftype, v, -1, p))) return SQ_ERROR;
+        p = (uint8_t*)p + elsize;
+        sq_pop(v,2);
+    }
     sq_poptop(v);
-    offset += index * sqt_basesize(at->oftype);
-    
+    return SQ_OK;
 }
-*/
 
 const SQTBasicTypeDef SQ_Basic_array_init = {
     sq_pushbasic_array,
     sq_getbasic_array,
-//    sq_refmember_array,
     0,
     0,
     _SC("array"),
@@ -215,25 +197,30 @@ const SQTBasicTypeDef SQ_Basic_array_init = {
 
 static SQInteger __basetype_array_releasehook(SQUserPointer p, SQInteger SQ_UNUSED_ARG(size))
 {
-    sq_free( p, sizeof(SQTBasicTypeDef));
+    sq_free( p, sizeof(SQTBasicArrayTypeDef));
     return 1;
 }
 
 static SQInteger _array_constructor(HSQUIRRELVM v)
 {
     // this, oftype, length
-    SQTBasicTypeDef *oftype;
-    SQTBasicTypeDef *self;
+    const SQTBasicTypeDef *oftype;
+    SQTBasicArrayTypeDef *self;
     SQInteger length;
-    if(SQ_FAILED(sq_getinstanceup(v,2,(SQUserPointer*)&oftype,SQT_BASICTYPE_TYPE_TAG)))
-        return sq_throwerror(v,_SC("expecting basetype instance"));
+    if(SQ_FAILED(sqt_getbasictype(v,2,&oftype))) return SQ_ERROR;
     sq_getinteger(v,3,&length);
     if( length <= 0)
         return sq_throwerror(v,_SC("array length must be non-zero and pozitive"));
-    self = sq_malloc( sizeof(SQTBasicTypeDef));
-    *self = SQ_Basic_array_init;
-    self->size = length * sqt_basicsize(oftype);
-    self->align = sqt_basicalign(oftype);
+    self = sq_malloc( sizeof(SQTBasicArrayTypeDef));
+    self->b = SQ_Basic_array_init;
+    self->b.size = length * sqt_basicsize(oftype);
+    self->b.align = sqt_basicalign(oftype);
+    self->oftype = oftype;
+    self->length = length;
+//    self = sq_malloc( sizeof(SQTBasicTypeDef));
+//    *self = SQ_Basic_array_init;
+//    self->size = length * sqt_basicsize(oftype);
+//    self->align = sqt_basicalign(oftype);
 	if(SQ_FAILED(sq_setinstanceup(v,1,self))) {
 		return sq_throwerror(v, _SC("cannot create basic array instance"));
 	}
@@ -242,35 +229,6 @@ static SQInteger _array_constructor(HSQUIRRELVM v)
 	sq_setbyhandle(v,1,&_array_type_oftype);
 	return 0;
 }
-
-/*
-static SQInteger _array_constructor_1(HSQUIRRELVM v)
-{
-    SQTBasicTypeDef *oftype;
-    SQInteger length;
-    SQInteger size;
-    if(SQ_FAILED(sq_getinstanceup(v,2,(SQUserPointer*)&oftype,SQT_BASICTYPE_TYPE_TAG)))
-        return sq_throwerror(v,_SC("expecting basetype instance"));
-    sq_getinteger(v,3,&length);
-    if( length <= 0)
-        return sq_throwerror(v,_SC("array length must be non-zero and pozitive"));
-    //sq_getuserpointer(v,1,&at)
-    SQTBasicArrayTypeDef *at = sq_malloc( sizeof(SQTBasicArrayTypeDef));
-    at.b = SQ_Basic_array_init;
-    at.b.size = length * sqt_basesize(oftype);
-    at.b.align = sqt_basealign(oftype);
-    at.oftype = oftype;
-    at.length = length;
-	if(SQ_FAILED(sq_setinstanceup(v,1,at))) {
-		return sq_throwerror(v, _SC("cannot create basic array instance"));
-	}
-	sq_setreleasehook(v,1,__basetype_array_releasehook);
-	// reference oftype in array type
-	sq_push(v,2);
-	sq_setbyhandle(v,1,&_array_type_oftype);
-	return 0;
-}
-*/
 
 static SQInteger _array__typeof(HSQUIRRELVM v)
 {
@@ -295,8 +253,8 @@ static SQInteger _array_refmember(HSQUIRRELVM v)
     sq_getinteger(v,3,&offset);
     if( (index < 0) || (sqt_basicsize(self) < (aroff=(sqt_basicsize(oftype) * index))) )
         return sq_throwerror(v,_SC("index out of bounds"));
-    offset += index * aroff;
-    
+    offset += aroff;
+
     sq_pushregistrytable(v);                    // oftype, registry
     sq_pushstring(v,sqt_basicvalue_decl.reg_name,-1);    // oftype, registry, "basicvalue"
     if(SQ_FAILED(sq_get(v,-2)))                 // oftype, registry, basicvalue
@@ -309,37 +267,7 @@ static SQInteger _array_refmember(HSQUIRRELVM v)
         return SQ_ERROR;
     return 1;
 }
-/*
-static SQInteger _array_refmember_1(HSQUIRRELVM v)
-{
-    // type, ptr, offset, index
-    const SQTBasicTypeDef *oftype;
-    SQInteger index;
-    SQInteger offset;
-    SETUP_ARRAY(v);
-    if(SQ_FAILED(sq_getinteger(v,4,&index)))
-        return sq_throwerror(v,_SC("expecting integer index"));
-    if( (index < 0) || (index >= self->length))
-        return sq_throwerror(v,_SC("index out of bounds"));
-    sq_getbyhandle(v,1,&_array_type_oftype);    // oftype
-    if(SQ_FAILED(sqt_getbasictype(v,-1,&oftype)))
-        return SQ_ERROR;
-    sq_getinteger(v,3,&offset);
-    offset += index * sqt_basesize(oftype);
 
-    sq_pushregistrytable(v);                    // oftype, registry
-    sq_pushstring(v,sqt_basicvalue_decl,-1);    // oftype, registry, "basicvalue"
-    if(SQ_FAILED(sq_get(v,-2)))                 // oftype, registry, basicvalue
-        return SQ_ERROR;
-    sq_pushnull(v);                             // oftype, registry, basicvalue, dummy_this
-    sq_push(v,-4);  // repush oftype            // oftype, registry, basicvalue, dummy_this, oftype
-    sq_push(v,2);   // repush ptr               // oftype, registry, basicvalue, dummy_this, oftype, ptr
-    sq_pushinteger(v,offset);                   // oftype, registry, basicvalue, dummy_this, oftype, ptr, offset
-    if(SQ_FAILED(sq_call(v,4,SQTrue)))          // oftype, registry, basicvalue, ret_val
-        return SQ_ERROR;
-    return 1;
-}
-*/
 static const SQTMemberDecl _array_members[] = {
 	{_SC("$oftype"), &_array_type_oftype },
 	{NULL,NULL}
@@ -361,7 +289,6 @@ const SQTClassDecl sqt_basicarray_decl = {
 	_array_methods,         // methods
 	NULL,                   // globals
 };
-
 
 /* ------------------------------------
     Basic value
@@ -400,10 +327,9 @@ SQInteger sqt_basicvalue_get( HSQUIRRELVM v, SQInteger idx, const SQTBasicTypeDe
 
 static SQInteger _value_constructor(HSQUIRRELVM v)
 {
-    SQTBasicTypeDef *bt;
+    const SQTBasicTypeDef *bt;
     SQInteger top = sq_gettop(v);
-    if(SQ_FAILED(sq_getinstanceup(v,2,(SQUserPointer*)&bt,SQT_BASICTYPE_TYPE_TAG)))
-        return sq_throwerror(v,_SC("expecting basetype instance"));
+    if(SQ_FAILED(sqt_getbasictype(v,2,&bt))) return SQ_ERROR;
     if( top < 3) {
         sq_newuserdata(v,bt->size);
     }
@@ -451,18 +377,21 @@ static SQInteger _value_getref(HSQUIRRELVM v)
 
 static SQInteger _value__get(HSQUIRRELVM v)
 {
+    // value, index
     if(SQ_FAILED(_value_getref(v)))
         return SQ_ERROR;
 
-    // dereference base types    
+    // dereference base types
     sq_getbyhandle(v,-1,&_value_type_handle);   // type, refmember, ret_value, ret_type
     const SQTBasicTypeDef *reftype;
     if(SQ_FAILED(sqt_getbasictype(v,-1,&reftype)))
         return SQ_ERROR;
+    sq_poptop(v);                               // type, refmember, ret_value
     if( 0) {                // !!! missing basictype identification !!!
         HSQOBJECT hval;
         sq_resetobject(&hval);
         sq_getstackobj(v,-2,&hval);
+        sq_addref(v,&hval);
         sq_settop(v,0);
         sq_pushobject(v,hval);
         sq_release(v,&hval);
@@ -482,7 +411,7 @@ static SQInteger _value_set(HSQUIRRELVM v)
             return SQ_ERROR;
         if(SQ_FAILED(sqt_basicvalue_get(v,2,&src_type,&src_ptr)))
             return SQ_ERROR;
-        
+
         if( sqt_basicsize(dst_type) == sqt_basicsize(src_type)) {
             memcpy( dst_ptr, src_ptr, sqt_basicsize(dst_type));
         }
@@ -506,6 +435,7 @@ static SQInteger _value__set(HSQUIRRELVM v)
     HSQOBJECT hnewval;
     sq_resetobject(&hnewval);
     sq_getstackobj(v,3,&hnewval);
+    sq_addref(v,&hnewval);
     sq_poptop(v);                       // value, index
     if(SQ_FAILED(_value_getref(v))) {   // ... ret_value
         sq_release(v,&hnewval);
@@ -514,6 +444,7 @@ static SQInteger _value__set(HSQUIRRELVM v)
     HSQOBJECT hretval;
     sq_resetobject(&hretval);
     sq_getstackobj(v,-1,&hretval);
+    sq_addref(v,&hretval);
     sq_settop(v,0);                       //
     sq_pushobject(v,hretval);          // ret_val
     sq_release(v,&hretval);
@@ -531,29 +462,20 @@ static SQInteger _value_clear(HSQUIRRELVM v)
     memset( ptr, 0, sqt_basicsize(type));
     return 1;
 }
-/*
-static SQInteger _value__set(HSQUIRRELVM v)
+
+static SQInteger _value__cloned(HSQUIRRELVM v)
 {
-    // value, index
-    SQTBasicTypeDef *bt;
-    sq_getbyhandle(v,1,&_value_type_handle);
-    if(SQ_FAILED(sq_getinstanceup(v,-1,(SQUserPointer*)&bt,SQT_BASICTYPE_TYPE_TAG)))
-        return sq_throwerror(v,_SC("bad type"));
-    sq_poptop(v);
-    HSQOBJECT hval;
-    sq_resetobject(&hval);
-    sq_getstackobj(v,-1,&hval);
-    sq_poptop(v);
-    bt->ref_member( bt);
-    SQTBasicTypeDef *rt;
-    if(SQ_FAILED(sq_getinstanceup(v,-1,(SQUserPointer*)&rt,SQT_BASICTYPE_TYPE_TAG)))
-        return sq_throwerror(v,_SC("bad type"));
-    if( rt->flags & BT_BASIC_TYPE) {
-        
-    }
-    return 1;
+    const SQTBasicTypeDef *type;
+    SQUserPointer srcptr, dstptr;
+    SQInteger size;
+    if(SQ_FAILED(sqt_basicvalue_get(v,1,&type,&srcptr)))
+        return SQ_ERROR;
+    size = sqt_basicsize(type);
+    dstptr = sq_newuserdata(v,size);
+    memcpy(dstptr,srcptr,size);
+    sq_setbyhandle(v,1,&_value_ptr_handle);
+    return 0;
 }
-*/
 
 static const SQTMemberDecl _value_members[] = {
 	{_SC("$type"), &_value_type_handle },
@@ -572,6 +494,7 @@ static const SQRegFunction _value_methods[] = {
     _DECL_BASICVALUE_FUNC(getref,2,_SC("x.")),
     _DECL_BASICVALUE_FUNC(_get,2,_SC("x.")),
 	_DECL_BASICVALUE_FUNC(clear,1,_SC("x")),
+	_DECL_BASICVALUE_FUNC(_cloned,2,_SC("xx")),
     {NULL,(SQFUNCTION)0,0,NULL}
 };
 
@@ -610,7 +533,7 @@ SQUIRREL_API SQRESULT sqstd_register_basictypes(HSQUIRRELVM v)
 	if(SQ_FAILED(sqt_declareclass(v,&sqt_basictype_decl))) {
 		return SQ_ERROR;
 	}
-    
+
     REG_TYPE( uint8_t);
     REG_TYPE( int8_t);
     REG_TYPE( uint16_t);
@@ -632,20 +555,20 @@ SQUIRREL_API SQRESULT sqstd_register_basictypes(HSQUIRRELVM v)
 #else // SQUSEDOUBLE
     REG_TYPE_ALIAS( float, SQFloat);
 #endif // SQUSEDOUBLE
-    
+
  	sq_poptop(v);
-    
+
 	if(SQ_FAILED(sqt_declareclass(v,&sqt_basicarray_decl))) {
 		return SQ_ERROR;
 	}
  	sq_poptop(v);
-    
+
 	if(SQ_FAILED(sqt_declareclass(v,&sqt_basicvalue_decl))) {
 		return SQ_ERROR;
 	}
  	sq_poptop(v);
-    
+
     sq_newslot(v,-3,SQFalse);
-    
+
 	return SQ_OK;
 }
