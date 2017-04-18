@@ -12,16 +12,18 @@ API changes:
 - Two more methods are added to SQStream to help generalization of stream: Close and _Release. Method _Release is called by sqstd_frelease() and by stream release hooh.
 
 API added:
-- Three function are added to iteract with streams - sqt_loadfile, sqt_dofile and sqt_writeclosure.
+- Three function are added to iteract with streams - sqt_loadfile_stream, sqt_compile_stream, sqt_readclosure_stream and sqt_writeclosure_stream.
 - New SQTStreamReader is implemented based on SQStream. Stream reader gives ability to virtualy 'mark' and 'reset' position of readed SQStream (see sqt_loadfile).
 	Functions added: sqtsrdr_create, sqtsrdr_mark, sqtsrdr_reset
-- Declaration helpers: sqt_declareclass and sqt_declarefunctions
+- Text reader/writter based on SQStream with support for ASCII, UTF-8, UTF-16BE, UTF-16LE. Two functions to create streams sqt_textreader and sqt_textwriter.
+- Declaration helpers: sqt_declareclass, sqt_declaremembers and sqt_declarefunctions. Also structures to describe class/members declarations - SQTMemberDecl and SQTClassDecl.
 - Functions to convert UTF-8 to/from _WIN32-wchar_t
 
 From scripting side:
 - Functions loadfile, dofile and writeclosuretofile can allso read/write from stream.
 - 'stream' class has two new methods - print and readline
 - Added 'streamreader' calss.
+- Added 'textreader' and 'textwriter' calss.
 - Added 'popen' class.
 - Script name is passed as argument 0
 
@@ -34,4 +36,5 @@ Content of 'sqtlib' folder:
 - sqt_decl.c - Helpers for class/functions declaration.
 - sqt_squirrelio.cpp - SQUIRREL-I/O functions aka loadfile, dofile and writeclosuretofile.
 - sqt_streamreader.cpp - SQTStreamReader class
+- sqt_textio.cpp - sqt_textreader and sqt_textwriter
 - sqt_wstr.c - _WIN32 UTF-8 to/from wchar_t helpers
