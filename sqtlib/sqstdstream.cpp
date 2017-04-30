@@ -134,7 +134,7 @@ SQInteger _stream_readn(HSQUIRRELVM v)
     sq_getinteger(v, 2, &format);
     const SQTBasicTypeDef *bt = sqt_basictypebyid( format);
     if( bt != NULL) {
-        SQInteger size = sqt_basicsize(bt);
+        SQInteger size = sqt_basicgetsize(bt);
         SQUserPointer tmp = sq_getscratchpad(v,size);
         if(self->Read(tmp,size) != size)
             return sq_throwerror(v,_SC("io error"));
@@ -180,7 +180,7 @@ SQInteger _stream_writen(HSQUIRRELVM v)
     sq_getinteger(v, 3, &format);
     const SQTBasicTypeDef *bt = sqt_basictypebyid( format);
     if( bt != NULL) {
-        SQInteger size = sqt_basicsize(bt);
+        SQInteger size = sqt_basicgetsize(bt);
         SQUserPointer tmp = sq_getscratchpad(v,size);
         if( SQ_FAILED(sqt_basicget(bt,v,2,tmp))) return SQ_ERROR;
         if( self->Write(tmp, size) != size) return sq_throwerror(v,_SC("io error"));

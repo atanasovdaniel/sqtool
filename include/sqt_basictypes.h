@@ -7,8 +7,8 @@ extern "C" {
 
 typedef struct tagSQTBasicTypeDef SQTBasicTypeDef;
 
-SQUIRREL_API SQInteger sqt_basicsize( const SQTBasicTypeDef *bt);
-SQUIRREL_API SQInteger sqt_basicalign( const SQTBasicTypeDef *bt);
+SQUIRREL_API SQInteger sqt_basicgetsize( const SQTBasicTypeDef *bt);
+SQUIRREL_API SQInteger sqt_basicgetalign( const SQTBasicTypeDef *bt);
 SQUIRREL_API void sqt_basicpush( const SQTBasicTypeDef *bt, HSQUIRRELVM v, const SQUserPointer p);
 SQUIRREL_API SQRESULT sqt_basicget( const SQTBasicTypeDef *bt, HSQUIRRELVM v, SQInteger idx, SQUserPointer p);
 //SQUIRREL_API SQRESULT sqt_basicrefmember( const SQTBasicTypeDef *bt, HSQUIRRELVM v);
