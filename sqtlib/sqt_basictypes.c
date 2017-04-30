@@ -137,10 +137,71 @@ static SQInteger _basic__typeof(HSQUIRRELVM v)
     return 1;
 }
 
+static SQInteger _basic_size(HSQUIRRELVM v)
+{
+    const SQTBasicTypeDef *self;
+    if(SQ_FAILED(sqt_getbasictype(v,1,&self))) return SQ_ERROR;
+    sq_pushinteger(v,sqt_basicgetsize(self));
+    return 1;
+}
+
+static SQInteger _basic_align(HSQUIRRELVM v)
+{
+    const SQTBasicTypeDef *self;
+    if(SQ_FAILED(sqt_getbasictype(v,1,&self))) return SQ_ERROR;
+    sq_pushinteger(v,sqt_basicgetalign(self));
+    return 1;
+}
+
+static SQInteger _basic_name(HSQUIRRELVM v)
+{
+    const SQTBasicTypeDef *self;
+    if(SQ_FAILED(sqt_getbasictype(v,1,&self))) return SQ_ERROR;
+    sq_pushstring(v,self->name,-1);
+    return 1;
+}
+
+static SQInteger _basic_array(HSQUIRRELVM v)
+{
+    const SQTBasicTypeDef *self;
+    if(SQ_FAILED(sqt_getbasictype(v,1,&self))) return SQ_ERROR;
+    sq_pushregistrytable(v);                    // self, size, registry
+    sq_pushstring(v,sqt_basicarray_decl.reg_name,-1);    // self, size, registry, "basicarray"
+    if(SQ_FAILED(sq_get(v,-2)))                 // self, size, registry, basicarray
+        return SQ_ERROR;
+    sq_pushnull(v);                             // self, size, registry, basicarray, dummy_this
+    sq_push(v,1);  // repush oftype             // self, size, registry, basicarray, dummy_this, oftype
+    sq_push(v,2);  // repush size               // self, size, registry, basicarray, dummy_this, oftype, length
+    if(SQ_FAILED(sq_call(v,3,SQTrue,SQFalse)))  // self, size, registry, basicarray, ret_val
+        return SQ_ERROR;
+    return 1;
+}
+
+static SQInteger _basic_member(HSQUIRRELVM v)
+{
+    const SQTBasicTypeDef *self;
+    if(SQ_FAILED(sqt_getbasictype(v,1,&self))) return SQ_ERROR;
+    sq_pushregistrytable(v);                    // self, size, registry
+    sq_pushstring(v,sqt_basicmember_decl.reg_name,-1);    // self, size, registry, "basicmember"
+    if(SQ_FAILED(sq_get(v,-2)))                 // self, size, registry, basicmember
+        return SQ_ERROR;
+    sq_pushnull(v);                             // self, size, registry, basicmember, dummy_this
+    sq_push(v,2);  // repush name               // self, size, registry, basicmember, dummy_this, name
+    sq_push(v,1);  // repush type               // self, size, registry, basicmember, dummy_this, name, type
+    if(SQ_FAILED(sq_call(v,3,SQTrue,SQFalse)))  // self, size, registry, basicmember, ret_val
+        return SQ_ERROR;
+    return 1;
+}
+
 #define _DECL_BASICTYPE_FUNC(name,nparams,typecheck) {_SC(#name),_basic_##name,nparams,typecheck}
 static const SQRegFunction _type_methods[] = {
     _DECL_BASICTYPE_FUNC(constructor,2,_SC("xp")),
     _DECL_BASICTYPE_FUNC(_typeof,1,_SC("x")),
+    _DECL_BASICTYPE_FUNC(size,1,_SC("x")),
+    _DECL_BASICTYPE_FUNC(align,1,_SC("x")),
+    _DECL_BASICTYPE_FUNC(name,1,_SC("x")),
+    _DECL_BASICTYPE_FUNC(array,2,_SC("xi")),
+    _DECL_BASICTYPE_FUNC(member,2,_SC("xs")),
     {NULL,(SQFUNCTION)0,0,NULL}
 };
 
@@ -162,6 +223,13 @@ typedef struct tagSQTBasicArrayTypeDef {
     const SQTBasicTypeDef *oftype;
     SQInteger length;
 } SQTBasicArrayTypeDef;
+
+SQRESULT sqt_getbasicarray(HSQUIRRELVM v, SQInteger idx, SQTBasicArrayTypeDef **pbasicarray)
+{
+    if(SQ_FAILED(sq_getinstanceup(v,idx,(SQUserPointer*)pbasicarray,SQT_BASICARRAY_TYPE_TAG)))
+        return sq_throwerror(v,_SC("expecting basearray instance"));
+    return SQ_OK;
+}
 
 static HSQMEMBERHANDLE _array_type_oftype;
 
@@ -249,6 +317,22 @@ static SQInteger _array__typeof(HSQUIRRELVM v)
     return 1;
 }
 
+static SQInteger _array_type(HSQUIRRELVM v)
+{
+    SQTBasicArrayTypeDef *self;
+    if(SQ_FAILED(sqt_getbasicarray(v,1,&self))) return SQ_ERROR;
+    sq_getbyhandle(v,1,&_array_type_oftype);
+    return 1;
+}
+
+static SQInteger _array_len(HSQUIRRELVM v)
+{
+    SQTBasicArrayTypeDef *self;
+    if(SQ_FAILED(sqt_getbasicarray(v,1,&self))) return SQ_ERROR;
+    sq_pushinteger(v,self->length);
+    return 1;
+}
+
 static SQInteger _array_refmember(HSQUIRRELVM v)
 {
     const SQTBasicTypeDef *self = NULL;
@@ -290,6 +374,8 @@ static const SQTMemberDecl _array_members[] = {
 static const SQRegFunction _array_methods[] = {
     _DECL_ARRAYTYPE_FUNC(constructor,3,_SC("xxi")),
     _DECL_ARRAYTYPE_FUNC(_typeof,1,_SC("x")),
+    _DECL_ARRAYTYPE_FUNC(type,1,_SC("x")),
+    _DECL_ARRAYTYPE_FUNC(len,1,_SC("x")),
     _DECL_ARRAYTYPE_FUNC(refmember,4,_SC("xp|ui.")),
     {NULL,(SQFUNCTION)0,0,NULL}
 };
@@ -355,6 +441,30 @@ static SQInteger _member__typeof(HSQUIRRELVM v)
     return 1;
 }
 
+static SQInteger _member_type(HSQUIRRELVM v)
+{
+    SQTBasicMemberDef *self;
+    if(SQ_FAILED(sqt_getbasicmember(v,1,&self))) return SQ_ERROR;
+    sq_getbyhandle(v,1,&_member_type_handle);
+    return 1;
+}
+
+static SQInteger _member_name(HSQUIRRELVM v)
+{
+    SQTBasicMemberDef *self;
+    if(SQ_FAILED(sqt_getbasicmember(v,1,&self))) return SQ_ERROR;
+    sq_getbyhandle(v,1,&_member_name_handle);
+    return 1;
+}
+
+static SQInteger _member_offset(HSQUIRRELVM v)
+{
+    SQTBasicMemberDef *self;
+    if(SQ_FAILED(sqt_getbasicmember(v,1,&self))) return SQ_ERROR;
+    sq_pushinteger(v,self->offset);
+    return 1;
+}
+
 static const SQTMemberDecl _member_members[] = {
 	{_SC("$name"), &_member_name_handle },
 	{_SC("$type"), &_member_type_handle },
@@ -365,6 +475,9 @@ static const SQTMemberDecl _member_members[] = {
 static const SQRegFunction _member_methods[] = {
     _DECL_BASICMEMBER_FUNC(constructor,3,_SC("xsx")),
     _DECL_BASICMEMBER_FUNC(_typeof,1,_SC("x")),
+    _DECL_BASICMEMBER_FUNC(type,1,_SC("x")),
+    _DECL_BASICMEMBER_FUNC(name,1,_SC("x")),
+    _DECL_BASICMEMBER_FUNC(offset,1,_SC("x")),
     {NULL,(SQFUNCTION)0,0,NULL}
 };
 
@@ -387,6 +500,13 @@ typedef struct tagSQTBasicStructTypeDef {
     const SQChar *name;
 } SQTBasicStructTypeDef;
 
+SQRESULT sqt_getbasicstruct(HSQUIRRELVM v, SQInteger idx, SQTBasicStructTypeDef **pbasicstruct)
+{
+    if(SQ_FAILED(sq_getinstanceup(v,idx,(SQUserPointer*)pbasicstruct,SQT_BASICSTRUCT_TYPE_TAG)))
+        return sq_throwerror(v,_SC("expecting basestruct instance"));
+    return SQ_OK;
+}
+
 static void sq_pushbasic_struct(const SQTBasicTypeDef *bt, HSQUIRRELVM v, SQUserPointer p)
 {
     const SQTBasicStructTypeDef *self = (const SQTBasicStructTypeDef*)bt;
@@ -401,7 +521,7 @@ static void sq_pushbasic_struct(const SQTBasicTypeDef *bt, HSQUIRRELVM v, SQUser
     while( memb) {
         sq_pushstring(v,memb->name,-1);                             // table, index
         sqt_basicpush( memb->type, v, (uint8_t*)p + memb->offset);  // table, index, value
-        sq_set(v,-3);                                               // table
+        sq_newslot(v,-3,SQFalse);                                   // table
         memb = memb->next;
     }
 }
@@ -448,8 +568,7 @@ static SQInteger _struct_setmembers(HSQUIRRELVM v)
     SQTBasicStructTypeDef *self;
     SQTBasicMemberDef **plist;
     SQInteger offset;
-    if(SQ_FAILED(sq_getinstanceup(v,1,(SQUserPointer*)&self,SQT_BASICSTRUCT_TYPE_TAG)))
-        return sq_throwerror(v,_SC("invalid type tag"));
+    if(SQ_FAILED(sqt_getbasicstruct(v,1,&self))) return SQ_ERROR;
     if( self->members) return sq_throwerror(v,_SC("struct already have members"));
     
     plist = &self->members;
@@ -470,8 +589,8 @@ static SQInteger _struct_setmembers(HSQUIRRELVM v)
     sq_poptop(v);                               // inst, array
     
     if( self->members) {
-        self->b.size = offset;
         self->b.align = sqt_basicgetalign( self->members->type);
+        self->b.size = sqt_basicalign( self->b.align, offset);
         sq_setbyhandle(v,1,&_struct_members_handle);   // inst
     }
     return 0;
@@ -508,19 +627,18 @@ static SQInteger _struct_constructor(HSQUIRRELVM v)
 
 static SQInteger _struct_refmember(HSQUIRRELVM v)
 {
-    const SQTBasicTypeDef *self = NULL;
+    SQTBasicStructTypeDef *self = NULL;
     const SQChar *index;
     SQTBasicMemberDef *memb = NULL;
     SQInteger offset;
-    if(SQ_FAILED(sq_getinstanceup(v,1,(SQUserPointer*)&self,SQT_BASICSTRUCT_TYPE_TAG)))
-        return sq_throwerror(v,_SC("invalid type tag"));
+    if(SQ_FAILED(sqt_getbasicstruct(v,1,&self))) return SQ_ERROR;
     sq_getinteger(v,3,&offset);
     if(SQ_FAILED(sq_getstring(v,4,&index)))
         return sq_throwerror(v,_SC("expecting string index"));
 
     sq_getbyhandle(v,1,&_struct_members_handle);    // members
     sq_pushnull(v);                                 // members, null-iter
-    while(SQ_SUCCEEDED(sq_next(v,2))) {             // members, iter, key, memb
+    while(SQ_SUCCEEDED(sq_next(v,-2))) {             // members, iter, key, memb
         if(SQ_FAILED(sqt_getbasicmember(v, -1, &memb))) return SQ_ERROR;
         if( memb->name == index) {
             sq_remove(v,-2);                        // members, iter, memb
@@ -558,6 +676,30 @@ static SQInteger _struct__typeof(HSQUIRRELVM v)
     return 1;
 }
 
+static SQInteger _struct_len(HSQUIRRELVM v)
+{
+    SQTBasicStructTypeDef *self = NULL;
+    SQInteger len = 0;
+    SQTBasicMemberDef *memb = NULL;
+    if(SQ_FAILED(sqt_getbasicstruct(v,1,&self))) return SQ_ERROR;
+
+    memb = self->members;
+    while( memb) {
+        len++;
+        memb = memb->next;
+    }    
+    sq_pushinteger(v,len);
+    return 1;
+}
+
+static SQInteger _struct_name(HSQUIRRELVM v)
+{
+    SQTBasicStructTypeDef *self = NULL;
+    if(SQ_FAILED(sqt_getbasicstruct(v,1,&self))) return SQ_ERROR;
+    sq_getbyhandle(v,1,&_struct_name_handle);
+    return 1;
+}
+
 static const SQTMemberDecl _struct_members[] = {
 	{_SC("$members"), &_struct_members_handle },
 	{_SC("$name"), &_struct_name_handle },
@@ -570,11 +712,13 @@ static const SQRegFunction _struct_methods[] = {
     _DECL_BASICSTRUCT_FUNC(setmembers,2,_SC("xa")),
     _DECL_BASICSTRUCT_FUNC(refmember,4,_SC("xp|ui.")),
     _DECL_BASICSTRUCT_FUNC(_typeof,1,_SC("x")),
+    _DECL_BASICSTRUCT_FUNC(len,1,_SC("x")),
+    _DECL_BASICSTRUCT_FUNC(name,1,_SC("x")),
     {NULL,(SQFUNCTION)0,0,NULL}
 };
 
 const SQTClassDecl sqt_basicstruct_decl = {
-	NULL,				// base_class
+	&sqt_basictype_decl,    // base_class
     _SC("sqt_basicstruct"),	// reg_name
     _SC("basicstruct"),		// name
 	_struct_members,        // members
@@ -851,6 +995,16 @@ SQUIRREL_API SQRESULT sqstd_register_basictypes(HSQUIRRELVM v)
  	sq_poptop(v);
 
 	if(SQ_FAILED(sqt_declareclass(v,&sqt_basicarray_decl))) {
+		return SQ_ERROR;
+	}
+ 	sq_poptop(v);
+    
+	if(SQ_FAILED(sqt_declareclass(v,&sqt_basicmember_decl))) {
+		return SQ_ERROR;
+	}
+ 	sq_poptop(v);
+
+	if(SQ_FAILED(sqt_declareclass(v,&sqt_basicstruct_decl))) {
 		return SQ_ERROR;
 	}
  	sq_poptop(v);
