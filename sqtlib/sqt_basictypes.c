@@ -110,6 +110,38 @@ MK_BASE( int64_t, SQInteger, sq_pushinteger, sq_getinteger)
 MK_BASE( float, SQFloat, sq_pushfloat, sq_getfloat)
 MK_BASE( double, SQFloat, sq_pushfloat, sq_getfloat)
 
+
+static void sq_pushbasic_voidptr( const SQTBasicTypeDef *bt, HSQUIRRELVM v,const SQUserPointer p)
+{
+    SQUserPointer val = (SQUserPointer)*(const void**)p;
+	sq_pushuserpointer(v,val);
+}
+static SQRESULT sq_getbasic_voidptr( const SQTBasicTypeDef *bt, HSQUIRRELVM v, SQInteger idx, SQUserPointer p)
+{
+    SQUserPointer val;
+	SQObjectType ot = sq_gettype(v,idx);
+	if( ot == OT_USERPOINTER) {
+		sq_getuserpointer(v,idx,&val);
+	}
+	else if( ot == OT_USERDATA) {
+		sq_getuserdata(v,idx,&val,NULL);
+	}
+	else if( ot == OT_NULL) {
+		val = NULL;
+	}
+	else return sq_throwerror(v,_SC("expecting userpointer, userdata or null"));
+    *(void**)p = (void*)val;
+    return SQ_OK;
+}
+const SQTBasicTypeDef SQ_Basic_voidptr = {
+    sq_pushbasic_voidptr,
+    sq_getbasic_voidptr,
+    sizeof(void*),
+    offsetof( struct { uint8_t b; void *me; }, me),
+    _SC("voidptr"),
+};
+
+
 /* ------------------------------------
     Basic type
 ------------------------------------ */
@@ -213,6 +245,61 @@ const SQTClassDecl sqt_basictype_decl = {
 	_type_methods,          // methods
 	NULL,                   // globals
 };
+
+/* ------------------------------------
+    Pointer type
+------------------------------------ */
+
+static SQInteger _pointer_constructor(HSQUIRRELVM v)
+{
+    const SQTBasicTypeDef *oftype;
+    SQTBasicArrayTypeDef *self;
+    if(SQ_FAILED(sqt_getbasictype(v,2,&oftype))) return SQ_ERROR;
+    self = sq_malloc( sizeof(SQTBasicArrayTypeDef));
+    self->b = SQ_Basic_voidptr;
+    self->b.name = _SC("pointer");
+    self->oftype = oftype;
+    self->length = 0;
+	if(SQ_FAILED(sq_setinstanceup(v,1,self))) {
+		return sq_throwerror(v, _SC("cannot create basic array instance"));
+	}
+	sq_setreleasehook(v,1,__basetype_array_releasehook);
+	sq_push(v,2);
+	sq_setbyhandle(v,1,&_array_type_oftype);
+	return 0;
+}
+
+static SQInteger _pointer_refmember(HSQUIRRELVM v)
+{
+    const SQTBasicArrayTypeDef *self = NULL;
+    const SQTBasicTypeDef *oftype;
+    SQInteger index;
+    SQInteger offset;
+    SQInteger aroff;
+    if(SQ_FAILED(sq_getinstanceup(v,1,(SQUserPointer*)&self,SQT_BASICARRAY_TYPE_TAG)))
+        return sq_throwerror(v,_SC("invalid type tag"));
+    if(SQ_FAILED(sq_getinteger(v,4,&index)))
+        return sq_throwerror(v,_SC("expecting integer index"));
+    sq_getbyhandle(v,1,&_array_type_oftype);    // oftype
+    if(SQ_FAILED(sqt_getbasictype(v,-1,&oftype)))
+        return SQ_ERROR;
+    sq_getinteger(v,3,&offset);
+    if( (self->length) && ((index < 0) || (sqt_basicgetsize(self) < (aroff=(sqt_basicgetsize(oftype) * index)))) )
+        return sq_throwerror(v,_SC("index out of bounds"));
+    offset += aroff;
+
+    sq_pushregistrytable(v);                    // oftype, registry
+    sq_pushstring(v,sqt_basicvalue_decl.reg_name,-1);    // oftype, registry, "basicvalue"
+    if(SQ_FAILED(sq_get(v,-2)))                 // oftype, registry, basicvalue
+        return SQ_ERROR;
+    sq_pushnull(v);                             // oftype, registry, basicvalue, dummy_this
+    sq_push(v,-4);  // repush oftype            // oftype, registry, basicvalue, dummy_this, oftype
+    sq_push(v,2);   // repush ptr               // oftype, registry, basicvalue, dummy_this, oftype, ptr
+    sq_pushinteger(v,offset);                   // oftype, registry, basicvalue, dummy_this, oftype, ptr, offset
+    if(SQ_FAILED(sq_call(v,4,SQTrue,SQFalse)))  // oftype, registry, basicvalue, ret_val
+        return SQ_ERROR;
+    return 1;
+}
 
 /* ------------------------------------
     Array type
@@ -983,7 +1070,8 @@ SQUIRREL_API SQRESULT sqstd_register_basictypes(HSQUIRRELVM v)
 #else // _SQ64
     REG_TYPE_ALIAS( int32_t, SQInteger);
 #endif // _SQ64
-
+	REG_TYPE( voidptr);
+	
     REG_TYPE( float);
     REG_TYPE( double);
 #ifdef SQUSEDOUBLE
