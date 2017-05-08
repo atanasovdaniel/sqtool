@@ -35,6 +35,14 @@ function ctypes::basictype::dump(ind)
     ::print( (typeof this) + "(" + name() + ",s:" + size() + ",a:" + align() + ")");
 }
 
+function ctypes::basicpointer::dump(ind)
+{
+    ::print( (typeof this) + "(" + name() + ",s:" + size() + ",a:" + align() + ",\n");
+    ::print( ind + "\tt:");
+    type().dump(ind+"\t");
+    ::print( "\n" + ind + ")");
+}
+
 function ctypes::basicarray::dump(ind)
 {
     ::print( (typeof this) + "(" + name() + ",s:" + size() + ",a:" + align() + ",l:" + len() + ",\n");
@@ -134,52 +142,80 @@ function ctypes::basicstruct::dump(ind)
 //     for( local i=0; i < 5; i++) print( "val[" + i + "].get() --> " + val[i].get() + "\n");
 // }
 
+// {
+//     local st = ctypes.basicstruct("qaz");
+//     print( "size=" + st.size() + ", align=" + st.align() + "\n");
+//     
+//     st.setmembers( [
+//         ctypes.basicmember( "aa", ctypes.uint32_t),
+//         ctypes.uint8_t.member("bb")
+//         ctypes.uint8_t.array(5).member("cc")
+//         ctypes.uint8_t.member("dd")
+//         ]);
+//     
+//     print( "size=" + st.size() + ", align=" + st.align() + "\n");
+//     
+//     local val = ctypes.basicvalue( st);
+//     print( "val.aa=" + val.aa.get() + "\n");
+//     print( "val.bb=" + val.bb.get() + "\n");
+//     print( "val.cc=" + val.cc.get() + "\n");
+//     print( "val.dd=" + val.dd.get() + "\n");
+//     
+//     val.clear();
+//     print( "val.aa=" + val.aa.get() + "\n");
+//     print( "val.bb=" + val.bb.get() + "\n");
+//     print( "val.cc=" + val.cc.get() + "\n");
+//     print( "val.dd=" + val.dd.get() + "\n");
+//     
+//     val.set( { aa=11, bb=22, dd=44});
+//     print( "val.aa=" + val.aa.get() + "\n");
+//     print( "val.bb=" + val.bb.get() + "\n");
+//     print( "val.cc=" + val.cc.get() + "\n");
+//     print( "val.dd=" + val.dd.get() + "\n");
+//     
+//     //print( val.get() + "\n");
+//     dump_sa( "", val.get());
+//     print( "\n");
+//     st.dump("");
+//     print( "\n");
+//     
+//     local st2 = ctypes.basicstruct("wsx");
+//     st2.setmembers( [
+//         st.member( "aa"),
+// //        ctypes.uint8_t.member("bb")
+//         st.array(5).member("cc")
+//         ctypes.uint8_t.member("dd")
+//         ]);
+//     
+//     st2.dump("");
+//     print( "\n");
+// }
+
 {
-    local st = ctypes.basicstruct("qaz");
-    print( "size=" + st.size() + ", align=" + st.align() + "\n");
-    
-    st.setmembers( [
-        ctypes.basicmember( "aa", ctypes.uint32_t),
-        ctypes.uint8_t.member("bb")
-        ctypes.uint8_t.array(5).member("cc")
-        ctypes.uint8_t.member("dd")
-        ]);
-    
-    print( "size=" + st.size() + ", align=" + st.align() + "\n");
-    
-    local val = ctypes.basicvalue( st);
-    print( "val.aa=" + val.aa.get() + "\n");
-    print( "val.bb=" + val.bb.get() + "\n");
-    print( "val.cc=" + val.cc.get() + "\n");
-    print( "val.dd=" + val.dd.get() + "\n");
-    
-    val.clear();
-    print( "val.aa=" + val.aa.get() + "\n");
-    print( "val.bb=" + val.bb.get() + "\n");
-    print( "val.cc=" + val.cc.get() + "\n");
-    print( "val.dd=" + val.dd.get() + "\n");
-    
-    val.set( { aa=11, bb=22, dd=44});
-    print( "val.aa=" + val.aa.get() + "\n");
-    print( "val.bb=" + val.bb.get() + "\n");
-    print( "val.cc=" + val.cc.get() + "\n");
-    print( "val.dd=" + val.dd.get() + "\n");
-    
-    //print( val.get() + "\n");
-    dump_sa( "", val.get());
+    local art = ctypes.uint8_t.array(5);
+    art.dump("");
     print( "\n");
-    st.dump("");
+    local ptt = ctypes.uint8_t.pointer();
+    ptt.dump("");
     print( "\n");
     
-    local st2 = ctypes.basicstruct("wsx");
-    st2.setmembers( [
-        st.member( "aa"),
-//        ctypes.uint8_t.member("bb")
-        st.array(5).member("cc")
-        ctypes.uint8_t.member("dd")
-        ]);
+    local arv = ctypes.basicvalue(art);
+    arv.set( [0,1,2,3,4]);
     
-    st2.dump("");
-    print( "\n");
+    local ptv = ctypes.basicvalue(ptt);
+    ptv.set( arv[0].address());
+    
+    print( "ptv[2]=" + ptv[2].get() + "\n");
+    print( "ptv[3]=" + ptv[3].get() + "\n");
+    print( "ptv[4]=" + ptv[4].get() + "\n");
+    print( "ptv.get()=" + ptv.get() + "\n");
+
+    local v32 = ctypes.uint32_t.value();
+    v32.set( ptv);
+    print( "v32.get()=" + format("%X",v32.get()) + "\n");
+
+    v32 = ctypes.uint32_t.value(ptv.address());
+    print( "v32.get()=" + format("%X",v32.get()) + "\n");
+    
 }
 

@@ -75,6 +75,10 @@ Class basictype
 
     Returns a string nameof type.
 
+.. js:function:: pointer()
+
+    Returns new pointer to this type.
+
 .. js:function:: array( length)
 
     :param int length: Length of array in elements.
@@ -86,6 +90,37 @@ Class basictype
     :param string name: Name of member.
 	
     Returns new member object of this type with `name`.
+
+.. js:function:: value( data, offset)
+
+    :param userpointer data: Userdata or uerpointer to data
+    :param int offset: Offset in data where value begins.
+	
+    Returns new value object of this type.
+
+++++++++++++++++++++
+Class basicpointer
+++++++++++++++++++++
+
+    Pointer type class
+
+.. js:class:: basicpointer( oftype)
+
+    :param basetype oftype: Type of array element.
+
+	Create new pointer type.	
+
+.. js:function:: type()
+
+    Returns type of dereferenced pointer.
+
+.. js:function:: refmember( data, offset, index)
+
+    :param userpointer data: Userdata or uerpointer to data
+    :param int offset: Offset in data where pointer begins.
+    :param int index: Index to dereference.
+	
+    Returns new basicvalue representing dereferenced index from pointer.
 
 ++++++++++++++++++
 Class basicarray
@@ -223,16 +258,20 @@ Class basicvalue
 
 	Allocates new userdata containing copy of data from cloned object.
 
+.. js:function:: address()
+
+	Returns userpointer pointing to actual value address.
+
 --------------
 C API
 --------------
 
-.. _sqstd_register_systemlib:
+.. _sqstd_register_basictypes:
 
-.. c:function:: SQRESULT sqstd_register_systemlib(HSQUIRRELVM v)
+.. c:function:: SQRESULT sqstd_register_basictypes(HSQUIRRELVM v)
 
     :param HSQUIRRELVM v: the target VM
     :returns: an SQRESULT
     :remarks: The function aspects a table on top of the stack where to register the global library functions.
 
-    initialize and register the system library in the given VM.
+    initialize and register the basic types library in the given VM.

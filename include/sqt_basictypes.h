@@ -13,6 +13,8 @@ SQUIRREL_API void sqt_basicpush( const SQTBasicTypeDef *bt, HSQUIRRELVM v, const
 SQUIRREL_API SQRESULT sqt_basicget( const SQTBasicTypeDef *bt, HSQUIRRELVM v, SQInteger idx, SQUserPointer p);
 //SQUIRREL_API SQRESULT sqt_basicrefmember( const SQTBasicTypeDef *bt, HSQUIRRELVM v);
 
+SQUIRREL_API SQInteger sqt_basicvalue_get( HSQUIRRELVM v, SQInteger idx, const SQTBasicTypeDef **ptype, SQUserPointer *pptr);
+
 extern SQUIRREL_API_VAR const SQTBasicTypeDef SQ_Basic_uint8_t;
 extern SQUIRREL_API_VAR const SQTBasicTypeDef SQ_Basic_int8_t;
 extern SQUIRREL_API_VAR const SQTBasicTypeDef SQ_Basic_uint16_t;

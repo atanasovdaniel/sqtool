@@ -24,7 +24,7 @@ THE SOFTWARE.
 
 
 .. toctree::
-   :maxdepth: 1
+   :maxdepth: 3
    :numbered:
 
    sqt_ctypes.rst
