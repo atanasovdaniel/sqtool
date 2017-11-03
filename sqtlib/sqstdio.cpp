@@ -1,13 +1,9 @@
 /* see copyright notice in squirrel.h */
-/* see copyright notice in sqtool.h */
 #include <new>
 #include <stdio.h>
 #include <squirrel.h>
-#include <sqtool.h>
+#include <sqstdaux.h>
 #include <sqstdio.h>
-#include "sqstdstream.h"
-
-//#define SQSTD_FILE_TYPE_TAG (SQSTD_STREAM_TYPE_TAG | 0x00000001)
 
 //File
 struct SQFile : public SQStream {
@@ -44,7 +40,6 @@ struct SQFile : public SQStream {
 		this->~SQFile();
 		sq_free(this,sizeof(SQFile));
 	}
-	
     SQInteger Read(void *buffer,SQInteger size) {
 	    return (SQInteger)fread( buffer, 1, size, _handle);
     }
@@ -57,6 +52,15 @@ struct SQFile : public SQStream {
     SQInteger Tell() {
 	    return ftell( _handle);
     }
+    SQInteger Len() {
+        SQInteger prevpos=Tell();
+        if( Seek(0,SQ_SEEK_END) == 0) {
+			SQInteger size=Tell();
+			Seek(prevpos,SQ_SEEK_SET);
+			return size;
+		}
+		return -1;
+    }
     SQInteger Seek(SQInteger offset, SQInteger origin)  {
 		int realorigin;
 		switch(origin) {
@@ -67,17 +71,8 @@ struct SQFile : public SQStream {
 		}
 		return fseek( _handle, (long)offset, (int)realorigin);
     }
-    SQInteger Len() {
-        SQInteger prevpos=Tell();
-        if( Seek(0,SQ_SEEK_END) == 0) {
-			SQInteger size=Tell();
-			Seek(prevpos,SQ_SEEK_SET);
-			return size;
-		}
-		return -1;
-    }
-    bool IsValid() { return _handle ? true : false; }
-    bool EOS() { return feof( _handle); }
+    bool IsValid() { return _handle?true:false; }
+    bool EOS() { return feof( _handle)?true:false; }
     FILE *GetHandle() {return _handle;}
 protected:
     FILE *_handle;
@@ -162,7 +157,7 @@ SQFILE sqstd_popen(const SQChar *command ,const SQChar *mode)
 
 static SQInteger _file__typeof(HSQUIRRELVM v)
 {
-    sq_pushstring(v,std_file_decl.name,-1);
+    sq_pushstring(v,_sqstd_file_decl.name,-1);
     return 1;
 }
 
@@ -191,8 +186,6 @@ static SQInteger _file_constructor(HSQUIRRELVM v)
     }
 
     if(SQ_FAILED(sq_setinstanceup(v,1,f))) {
-        //f->~SQFile();
-        //sq_free(f,sizeof(SQFile));
 		f->_Release();
         return sq_throwerror(v, _SC("cannot create file instance"));
     }
@@ -208,8 +201,8 @@ static const SQRegFunction _file_methods[] = {
     {NULL,(SQFUNCTION)0,0,NULL}
 };
 
-const SQTClassDecl std_file_decl = {
-	&std_stream_decl,	// base_class
+const SQRegClass _sqstd_file_decl = {
+	&_sqstd_stream_decl,	// base_class
     _SC("std_file"),	// reg_name
     _SC("file"),		// name
 	NULL,				// members
@@ -219,7 +212,7 @@ const SQTClassDecl std_file_decl = {
 
 static SQInteger _popen__typeof(HSQUIRRELVM v)
 {
-    sq_pushstring(v,std_popen_decl.name,-1);
+    sq_pushstring(v,_sqstd_popen_decl.name,-1);
     return 1;
 }
 
@@ -265,8 +258,8 @@ static const SQRegFunction _popen_methods[] = {
     {NULL,(SQFUNCTION)0,0,NULL}
 };
 
-const SQTClassDecl std_popen_decl = {
-	&std_file_decl,	// base_class
+const SQRegClass _sqstd_popen_decl = {
+	&_sqstd_file_decl,	// base_class
     _SC("std_popen"),	// reg_name
     _SC("popen"),		// name
 	NULL,				// members
@@ -274,11 +267,11 @@ const SQTClassDecl std_popen_decl = {
 	NULL,				// globals
 };
 
-SQRESULT sqstd_createfile(HSQUIRRELVM v, FILE *file, SQBool own)
+SQRESULT sqstd_createfile(HSQUIRRELVM v, SQUserPointer file,SQBool own)
 {
     SQInteger top = sq_gettop(v);
     sq_pushregistrytable(v);
-    sq_pushstring(v,std_file_decl.reg_name,-1);
+    sq_pushstring(v,_sqstd_file_decl.reg_name,-1);
     if(SQ_SUCCEEDED(sq_get(v,-2))) {
         sq_remove(v,-2); //removes the registry
         sq_pushroottable(v); // push the this
@@ -298,7 +291,7 @@ SQRESULT sqstd_createfile(HSQUIRRELVM v, FILE *file, SQBool own)
     return SQ_ERROR;
 }
 
-SQRESULT sqstd_getfile(HSQUIRRELVM v, SQInteger idx, FILE **file)
+SQRESULT sqstd_getfile(HSQUIRRELVM v, SQInteger idx, SQUserPointer *file)
 {
     SQFile *fileobj = NULL;
     if(SQ_SUCCEEDED(sq_getinstanceup(v,idx,(SQUserPointer*)&fileobj,(SQUserPointer)SQSTD_FILE_TYPE_TAG))) {
@@ -308,34 +301,30 @@ SQRESULT sqstd_getfile(HSQUIRRELVM v, SQInteger idx, FILE **file)
     return sq_throwerror(v,_SC("not a file"));
 }
 
-SQRESULT sqstd_register_iolib(HSQUIRRELVM v)
-{
-    SQInteger top = sq_gettop(v);
-	if(SQ_FAILED(sqt_declareclass(v,&std_file_decl)))
-	{
-		return SQ_ERROR;
-	}
-	sq_poptop(v);
-	if(SQ_FAILED(sqt_declareclass(v,&std_popen_decl)))
-	{
-		return SQ_ERROR;
-	}
-	sq_poptop(v);
-    //create delegate
-    //declare_stream(v,_SC("file"),(SQUserPointer)SQSTD_FILE_TYPE_TAG,_SC("std_file"),_file_methods,iolib_funcs);
-    //declare_stream(v,_SC("popen"),(SQUserPointer)SQSTD_FILE_TYPE_TAG,_SC("std_popen"),_popen_methods,NULL);
-    sq_pushstring(v,_SC("stdout"),-1);
-    sqstd_createfile(v,stdout,SQFalse);
-    sq_newslot(v,-3,SQFalse);
-	
-    sq_pushstring(v,_SC("stdin"),-1);
-    sqstd_createfile(v,stdin,SQFalse);
-    sq_newslot(v,-3,SQFalse);
-	
-    sq_pushstring(v,_SC("stderr"),-1);
-    sqstd_createfile(v,stderr,SQFalse);
-    sq_newslot(v,-3,SQFalse);
-	
-    sq_settop(v,top);
-    return SQ_OK;
-}
+// SQRESULT sqstd_register_fileiolib(HSQUIRRELVM v)
+// {
+//     SQInteger top = sq_gettop(v);
+// 	if(SQ_FAILED(sqstd_registerclass(v,&_sqstd_file_decl)))
+// 	{
+// 		return SQ_ERROR;
+// 	}
+// 	sq_poptop(v);
+// 	if(SQ_FAILED(sqstd_registerclass(v,&_sqstd_popen_decl)))
+// 	{
+// 		return SQ_ERROR;
+// 	}
+// 	sq_poptop(v);
+//     
+//     sq_pushstring(v,_SC("stdout"),-1);
+//     sqstd_createfile(v,stdout,SQFalse);
+//     sq_newslot(v,-3,SQFalse);
+//     sq_pushstring(v,_SC("stdin"),-1);
+//     sqstd_createfile(v,stdin,SQFalse);
+//     sq_newslot(v,-3,SQFalse);
+//     sq_pushstring(v,_SC("stderr"),-1);
+//     sqstd_createfile(v,stderr,SQFalse);
+//     sq_newslot(v,-3,SQFalse);
+//     
+//     sq_settop(v,top);
+//     return SQ_OK;
+// }

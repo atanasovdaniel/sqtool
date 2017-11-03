@@ -56,15 +56,14 @@ $(eval $(call MAKE_LIBRARY,libsqstdstring.a))
 CXX_SOURCE_FILES+=./sqtlib/sqstdsystem.cpp
 $(eval $(call MAKE_LIBRARY,libsqstdsystem.a))
 
-CXX_SOURCE_FILES+=./sqtlib/sqstdio.cpp
-CXX_SOURCE_FILES+=./sqtlib/sqstdstream.cpp
-CXX_SOURCE_FILES+=./sqtlib/sqstdblob.cpp
-CXX_SOURCE_FILES+=./sqtlib/sqt_streamreader.cpp
-CXX_SOURCE_FILES+=./sqtlib/sqt_textio.cpp
-CXX_SOURCE_FILES+=./sqtlib/sqt_squirrelio.cpp
-$(eval $(call MAKE_LIBRARY,libsqstdio.a))
+CXX_SOURCE_FILES+=$(SQUIRREL_ROOT)/sqstdlib/sqstdio.cpp
+CXX_SOURCE_FILES+=$(SQUIRREL_ROOT)/sqstdlib/sqstdstream.cpp
+CXX_SOURCE_FILES+=$(SQUIRREL_ROOT)/sqstdlib/sqstdblob.cpp
+CXX_SOURCE_FILES+=$(SQUIRREL_ROOT)/sqstdlib/sqstdstreamreader.cpp
+CXX_SOURCE_FILES+=$(SQUIRREL_ROOT)/sqstdlib/sqstdtextio.cpp
+CXX_SOURCE_FILES+=$(SQUIRREL_ROOT)/sqstdlib/sqstdsquirrelio.cpp
+#$(eval $(call MAKE_LIBRARY,libsqstdio.a))
 
-CXX_SOURCE_FILES+=./sqtlib/sqt_decl.c
 CXX_SOURCE_FILES+=./sqtlib/sqt_wstr.c
 $(eval $(call MAKE_LIBRARY,libsqtool.a))
 

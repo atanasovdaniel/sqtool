@@ -14,6 +14,7 @@
 #include <time.h>
 
 #include <squirrel.h>
+#include <sqstdaux.h>
 #include <sqtool.h>
 #include <sqstdsystem.h>
 
@@ -255,6 +256,6 @@ static const SQRegFunction systemlib_funcs[]={
 
 SQInteger sqstd_register_systemlib(HSQUIRRELVM v)
 {
-	sqt_declarefunctions(v, systemlib_funcs);
+	sqstd_registerfunctions(v,systemlib_funcs);
     return 1;
 }

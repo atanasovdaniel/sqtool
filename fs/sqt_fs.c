@@ -4,6 +4,7 @@
 #include <stdio.h>
 
 #include <squirrel.h>
+#include <sqstdaux.h>
 #include <sqtool.h>
 
 #include "sqt_fs.h"
@@ -28,7 +29,7 @@
 
 #endif // _WIN32
 
-static SQRegFunction ezxml_funcs[]={
+static SQRegFunction fs_funcs[]={
 	_DECL_GLOBALFS_FUNC( fsListDir, 2, _SC(".s")),
 	_DECL_GLOBALFS_FUNC( fsExist, 2, _SC(".s")),
 	_DECL_GLOBALFS_FUNC( fsIsFile, 2, _SC(".s")),
@@ -38,5 +39,5 @@ static SQRegFunction ezxml_funcs[]={
 
 SQRESULT sqstd_register_fs(HSQUIRRELVM v)
 {
-	return sqt_declarefunctions( v, ezxml_funcs);
+	return sqstd_registerfunctions( v, fs_funcs);
 }

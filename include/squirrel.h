@@ -22,11 +22,14 @@ THE SOFTWARE.
 #ifndef _SQUIRREL_H_
 #define _SQUIRREL_H_
 
+#ifdef _SQ_CONFIG_INCLUDE
+#include _SQ_CONFIG_INCLUDE
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-// stub
 #ifndef SQUIRREL_API_VAR
 #define SQUIRREL_API_VAR
 #endif
@@ -262,6 +265,7 @@ SQUIRREL_API SQRESULT sq_getbase(HSQUIRRELVM v,SQInteger idx);
 SQUIRREL_API SQBool sq_instanceof(HSQUIRRELVM v);
 SQUIRREL_API SQRESULT sq_tostring(HSQUIRRELVM v,SQInteger idx);
 SQUIRREL_API void sq_tobool(HSQUIRRELVM v, SQInteger idx, SQBool *b);
+SQUIRREL_API SQRESULT sq_getstringandsize(HSQUIRRELVM v,SQInteger idx,const SQChar **c,SQInteger *size);
 SQUIRREL_API SQRESULT sq_getstring(HSQUIRRELVM v,SQInteger idx,const SQChar **c);
 SQUIRREL_API SQRESULT sq_getinteger(HSQUIRRELVM v,SQInteger idx,SQInteger *i);
 SQUIRREL_API SQRESULT sq_getfloat(HSQUIRRELVM v,SQInteger idx,SQFloat *f);
@@ -397,7 +401,7 @@ SQUIRREL_API void sq_setnativedebughook(HSQUIRRELVM v,SQDEBUGHOOK hook);
 #define SQ_SUCCEEDED(res) (res>=0)
 
 #ifdef __GNUC__
-# define SQ_UNUSED_ARG(x) __attribute__((unused)) x
+# define SQ_UNUSED_ARG(x) x __attribute__((__unused__))
 #else
 # define SQ_UNUSED_ARG(x) x
 #endif
