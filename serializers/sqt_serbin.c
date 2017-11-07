@@ -6,6 +6,9 @@
 #include <sqstdio.h>
 #include <sqstdblob.h>
 
+#define MAGIC_NORMAL    0x01534244L
+#define MAGIC_SWAP      0x44425301L
+
 /*
 0nnn nnnn	- string N
 100n nnnn	- array N
@@ -27,18 +30,56 @@
 //typedef SQInteger (*SQWRITEFUNC)(SQUserPointer user, SQUserPointer buff, SQInteger size);
 //typedef SQInteger (*SQREADFUNC)(SQUserPointer user, SQUserPointer buff, SQInteger size);
 
-static SQRESULT read_unsigned( SQREADFUNC readfct, SQUserPointer user, SQInteger len, SQUnsignedInteger *pres)
+#define SBF_SWAP    0x01
+
+typedef struct
+{
+    unsigned int flags;
+    SQREADFUNC readfct;
+    SQUserPointer user;
+    HSQUIRRELVM v;
+} read_ctx_t;
+
+typedef struct
+{
+    unsigned int flags;
+    SQWRITEFUNC writefct;
+    SQUserPointer user;
+    HSQUIRRELVM v;
+} write_ctx_t;
+
+#define DEF_BSWAP( _T) \
+_T bswap_##_T( _T val) { \
+    _T retVal; \
+    char *pVal = (char*)&val; \
+    char *pRetVal = (char*)&retVal; \
+    for(int i=0; i<sizeof(_T); i++) { \
+        pRetVal[sizeof(_T)-1-i] = pVal[i]; \
+    } \
+    return retVal; \
+}
+
+static DEF_BSWAP( uint16_t)
+static DEF_BSWAP( uint32_t)
+#ifdef _SQ64
+static DEF_BSWAP( uint64_t)
+#endif // _SQ64
+static DEF_BSWAP( float)
+static DEF_BSWAP( double)
+
+static SQRESULT read_unsigned( read_ctx_t *ctx, SQInteger len, SQUnsignedInteger *pres)
 {
 	SQRESULT r;
 	switch( len) {
 		case 1: {
 			uint8_t l;
-			r = (readfct( user, &l, 1) == 1) ? SQ_OK : SQ_ERROR;
+			r = (ctx->readfct( ctx->user, &l, 1) == 1) ? SQ_OK : SQ_ERROR;
 			*pres = l;
 		} break;
 		case 2: {
 			uint16_t l;
-			r = (readfct( user, &l, 2) == 2) ? SQ_OK : SQ_ERROR;
+			r = (ctx->readfct( ctx->user, &l, 2) == 2) ? SQ_OK : SQ_ERROR;
+            if( ctx->flags & SBF_SWAP) l = bswap_uint16_t( l);
 			*pres = l;
 		} break;
 		case 4: {
@@ -47,13 +88,15 @@ static SQRESULT read_unsigned( SQREADFUNC readfct, SQUserPointer user, SQInteger
 #else // _SQ64
 			SQUnsignedInteger l;
 #endif // _SQ64
-			r = (readfct( user, &l, 4) == 4) ? SQ_OK : SQ_ERROR;
+			r = (ctx->readfct( ctx->user, &l, 4) == 4) ? SQ_OK : SQ_ERROR;
+            if( ctx->flags & SBF_SWAP) l = bswap_uint32_t( l);
 			*pres = l;
 		} break;
 #ifdef _SQ64
 		case 8: {
 			SQUnsignedInteger l;
-			r = (readfct( user, &l, 8) == 8) ? SQ_OK : SQ_ERROR;
+			r = (ctx->readfct( ctx->user, &l, 8) == 8) ? SQ_OK : SQ_ERROR;
+            if( ctx->flags & SBF_SWAP) l = bswap_uint64_t( l);
 			*pres = l;
 		} break;
 #endif // _SQ64
@@ -64,19 +107,20 @@ static SQRESULT read_unsigned( SQREADFUNC readfct, SQUserPointer user, SQInteger
 	return r;
 }
 
-static SQRESULT read_signed( SQREADFUNC readfct, SQUserPointer user, SQInteger len, SQInteger *pres)
+static SQRESULT read_signed( read_ctx_t *ctx, SQInteger len, SQInteger *pres)
 {
 	SQRESULT r;
 	switch( len) {
 		case 1: {
 			int8_t l;
-			r = (readfct( user, &l, 1) == 1) ? SQ_OK : SQ_ERROR;
+			r = (ctx->readfct( ctx->user, &l, 1) == 1) ? SQ_OK : SQ_ERROR;
 			*pres = l;
 		} break;
 		case 2: {
 			int16_t l;
-			r = (readfct( user, &l, 2) == 2) ? SQ_OK : SQ_ERROR;
-			*pres = l;
+			r = (ctx->readfct( ctx->user, &l, 2) == 2) ? SQ_OK : SQ_ERROR;
+            if( ctx->flags & SBF_SWAP) l = bswap_uint16_t( l);
+			*pres = (SQInteger)l;
 		} break;
 		case 4: {
 #ifdef _SQ64
@@ -84,14 +128,16 @@ static SQRESULT read_signed( SQREADFUNC readfct, SQUserPointer user, SQInteger l
 #else // _SQ64
 			SQInteger l;
 #endif // _SQ64
-			r = (readfct( user, &l, 4) == 4) ? SQ_OK : SQ_ERROR;
-			*pres = l;
+			r = (ctx->readfct( ctx->user, &l, 4) == 4) ? SQ_OK : SQ_ERROR;
+            if( ctx->flags & SBF_SWAP) l = bswap_uint32_t( l);
+			*pres = (SQInteger)l;
 		} break;
 #ifdef _SQ64
 		case 8: {
 			SQInteger l;
-			r = (readfct( user, &l, 8) == 8) ? SQ_OK : SQ_ERROR;
-			*pres = l;
+			r = (ctx->readfct( ctx->user, &l, 8) == 8) ? SQ_OK : SQ_ERROR;
+            if( ctx->flags & SBF_SWAP) l = bswap_uint64_t( l);
+			*pres = (SQInteger)l;
 		} break;
 #endif // _SQ64
 		default:
@@ -101,14 +147,22 @@ static SQRESULT read_signed( SQREADFUNC readfct, SQUserPointer user, SQInteger l
 	return r;
 }
 
-static SQRESULT read_float( SQREADFUNC readfct, SQUserPointer user, SQInteger len, SQFloat *pres)
+static SQRESULT read_float( read_ctx_t *ctx, SQInteger len, SQFloat *pres)
 {
 	SQRESULT r;
 	switch( len) {
-		case sizeof(SQFloat): {
-			SQFloat l;
-			r = (readfct( user, &l, sizeof(SQFloat)) == sizeof(SQFloat)) ? SQ_OK : SQ_ERROR;
-			*pres = l;
+        case 4: {
+            float l;
+			r = (ctx->readfct( ctx->user, &l, 4) == 4) ? SQ_OK : SQ_ERROR;
+            if( ctx->flags & SBF_SWAP) l = bswap_float( l);
+            *pres = (SQFloat)l;
+        } break;
+        
+		case 8: {
+            double l;
+			r = (ctx->readfct( ctx->user, &l, 8) == 8) ? SQ_OK : SQ_ERROR;
+            if( ctx->flags & SBF_SWAP) l = bswap_double( l);
+            *pres = (SQFloat)l;
 		} break;
 		default:
 			r = SQ_ERROR;
@@ -135,11 +189,11 @@ static SQRESULT read_float( SQREADFUNC readfct, SQUserPointer user, SQInteger le
 1111 1111	- *
 */
 
-SQRESULT sqt_serbin_read( HSQUIRRELVM v, SQREADFUNC readfct, SQUserPointer user)
+SQRESULT sqt_serbin_read( read_ctx_t *ctx)
 {
 	SQUnsignedInteger len;
 	unsigned char b;
-	if( readfct( user, &b, 1) == 1) {
+	if( ctx->readfct( ctx->user, &b, 1) == 1) {
 		if( !(b & 0x80)) {							// 0nnn nnnn	- string N
 			// string N
 			len = b & 0x7F;
@@ -160,7 +214,7 @@ SQRESULT sqt_serbin_read( HSQUIRRELVM v, SQREADFUNC readfct, SQUserPointer user)
 				len = 1 << (b & 0x07);
 				b = (b >> 3)  & 0x07;
 				if( b < 4) {
-					if( SQ_FAILED( read_unsigned( readfct, user, len, &len)))
+					if( SQ_FAILED( read_unsigned( ctx, len, &len)))
 						return SQ_ERROR;
 					switch( b & 0x03) {
 						case 0: goto rd_blob;		// 1100 0nnn	- blob 2^N
@@ -172,24 +226,24 @@ SQRESULT sqt_serbin_read( HSQUIRRELVM v, SQREADFUNC readfct, SQUserPointer user)
 				}
 				else if( b == 4) {					// 1110 0nnn	- int 2^N
 					SQInteger sint;
-					if( SQ_FAILED( read_signed( readfct, user, len, &sint)))
+					if( SQ_FAILED( read_signed( ctx, len, &sint)))
 						return SQ_ERROR;
-					sq_pushinteger(v,sint);
+					sq_pushinteger(ctx->v,sint);
 					return SQ_OK;
 				}
 				else if( b == 5) {					// 1110 1nnn	- float 2^N
 					SQFloat flt;
-					if( SQ_FAILED( read_float( readfct, user, len, &flt)))
+					if( SQ_FAILED( read_float( ctx, len, &flt)))
 						return SQ_ERROR;
-					sq_pushfloat(v, flt);
+					sq_pushfloat(ctx->v, flt);
 					return SQ_OK;
 				}
 			}
 			else {
 				switch( b & 0x0F) {
-					case 0:	sq_pushbool(v,SQFalse); return SQ_OK;	// 1111 0000	- false
-					case 1:	sq_pushbool(v,SQTrue); return SQ_OK;	// 1111 0001	- true
-					case 2:	sq_pushnull(v); return SQ_OK;			// 1111 0010	- null
+					case 0:	sq_pushbool(ctx->v,SQFalse); return SQ_OK;	// 1111 0000	- false
+					case 1:	sq_pushbool(ctx->v,SQTrue); return SQ_OK;	// 1111 0001	- true
+					case 2:	sq_pushnull(ctx->v); return SQ_OK;			// 1111 0010	- null
 					default: break;
 				}
 			}
@@ -198,9 +252,9 @@ SQRESULT sqt_serbin_read( HSQUIRRELVM v, SQREADFUNC readfct, SQUserPointer user)
 	return SQ_ERROR;
 
 rd_string: {
-		SQChar *tmp = sq_getscratchpad(v,len);
-		if( readfct( user, tmp, len) == len) {
-			sq_pushstring(v, tmp, len);
+		SQChar *tmp = sq_getscratchpad(ctx->v,len);
+		if( ctx->readfct( ctx->user, tmp, len) == len) {
+			sq_pushstring(ctx->v, tmp, len);
 			return SQ_OK;
 		}
 		return SQ_ERROR;
@@ -208,42 +262,42 @@ rd_string: {
 	
 rd_array: {
 		SQInteger idx = 0;
-		sq_newarray(v,len);										// array
+		sq_newarray(ctx->v,len);								// array
 		while( len) {
-			sq_pushinteger(v,idx);								// array, index
-			if( SQ_SUCCEEDED( sqt_serbin_read(v, readfct, user))) {	// array, index, value
-				if( SQ_SUCCEEDED(sq_set(v,-3))) {				// array
+			sq_pushinteger(ctx->v,idx);							// array, index
+			if( SQ_SUCCEEDED( sqt_serbin_read( ctx))) {         // array, index, value
+				if( SQ_SUCCEEDED(sq_set(ctx->v,-3))) {			// array
 					len--;
 					idx++;
 					continue;
 				}
 			}
-			sq_pop(v,2);										//
+			sq_pop(ctx->v,2);									//
 			return SQ_ERROR;
 		}
 		return SQ_OK;
 	}
 
 rd_table:
-	sq_newtableex(v, len);										// table
+	sq_newtableex(ctx->v, len);                                         // table
 	while( len) {
-		if( SQ_SUCCEEDED( sqt_serbin_read(v, readfct, user))) {		// table, key
-			if( SQ_SUCCEEDED( sqt_serbin_read(v, readfct, user))) {	// table, key, value
-				if( SQ_SUCCEEDED(sq_newslot(v,-3,SQFalse))) {		// table
+		if( SQ_SUCCEEDED( sqt_serbin_read(ctx))) {                      // table, key
+			if( SQ_SUCCEEDED( sqt_serbin_read(ctx))) {                  // table, key, value
+				if( SQ_SUCCEEDED(sq_newslot(ctx->v,-3,SQFalse))) {		// table
 					len--;
 					continue;
 				}
 			}
-			sq_poptop(v);										// table
+			sq_poptop(ctx->v);                                          // table
 		}
-		sq_poptop(v);											//
+		sq_poptop(ctx->v);                                              //
 		return SQ_ERROR;
 	}
 	return SQ_OK;
 
 rd_blob: {
-		SQUserPointer ptr = sqstd_createblob(v, len);
-		if( readfct( user, ptr, len) == len) {
+		SQUserPointer ptr = sqstd_createblob(ctx->v, len);
+		if( ctx->readfct( ctx->user, ptr, len) == len) {
 			return SQ_OK;
 		}
 		return SQ_ERROR;
@@ -269,7 +323,7 @@ rd_blob: {
 1111 1111	- *
 */
 
-static SQRESULT write_signed( SQWRITEFUNC writefct, SQUserPointer user, SQInteger val)
+static SQRESULT write_signed( write_ctx_t *ctx, SQInteger val)
 {
 	SQInteger len;
 	int8_t b[1+sizeof(SQInteger)];
@@ -301,10 +355,10 @@ static SQRESULT write_signed( SQWRITEFUNC writefct, SQUserPointer user, SQIntege
 		len = 9;
 	}
 #endif // _SQ64
-	return (writefct( user, b, len) == len) ? SQ_OK : SQ_ERROR;
+	return (ctx->writefct( ctx->user, b, len) == len) ? SQ_OK : SQ_ERROR;
 }
 
-static SQRESULT write_unsigned( SQWRITEFUNC writefct, SQUserPointer user, SQInteger pfx, SQUnsignedInteger val)
+static SQRESULT write_unsigned( write_ctx_t *ctx, SQInteger pfx, SQUnsignedInteger val)
 {
 	SQInteger len;
 	uint8_t b[1+sizeof(SQUnsignedInteger)];
@@ -336,10 +390,10 @@ static SQRESULT write_unsigned( SQWRITEFUNC writefct, SQUserPointer user, SQInte
 		len = 9;
 	}
 #endif // _SQ64
-	return (writefct( user, b, len) == len) ? SQ_OK : SQ_ERROR;
+	return (ctx->writefct( ctx->user, b, len) == len) ? SQ_OK : SQ_ERROR;
 }
 
-static SQRESULT write_float( SQWRITEFUNC writefct, SQUserPointer user, SQFloat val)
+static SQRESULT write_float( write_ctx_t *ctx, SQFloat val)
 {
 	uint8_t b[1+sizeof(SQFloat)];
 	switch( sizeof(SQFloat)) {
@@ -349,30 +403,30 @@ static SQRESULT write_float( SQWRITEFUNC writefct, SQUserPointer user, SQFloat v
 		case 16: b[0] = 0xE8 | 4; break;
 	}
 	*(SQFloat*)(b+1) = val;
-	return (writefct( user, b, 1+sizeof(SQFloat)) == (1+sizeof(SQFloat))) ? SQ_OK : SQ_ERROR;
+	return (ctx->writefct( ctx->user, b, 1+sizeof(SQFloat)) == (1+sizeof(SQFloat))) ? SQ_OK : SQ_ERROR;
 }
 
 
-SQRESULT sqt_serbin_write( HSQUIRRELVM v, SQWRITEFUNC writefct, SQUserPointer user)
+SQRESULT sqt_serbin_write( write_ctx_t *ctx)
 {
 	uint8_t b;
-	switch(sq_gettype(v,-1))
+	switch(sq_gettype(ctx->v,-1))
 	{
 		case OT_NULL: {
 			b = 0xF2;
-			if( writefct( user, &b, 1) == 1)
+			if( ctx->writefct( ctx->user, &b, 1) == 1)
 				return SQ_OK;
 			return SQ_ERROR;
 		}
 		case OT_INTEGER: {
 			SQInteger val;
-			sq_getinteger(v,-1,&val);
-			return write_signed( writefct, user, val);
+			sq_getinteger(ctx->v,-1,&val);
+			return write_signed( ctx, val);
 		}
 		case OT_FLOAT: {
 			SQFloat val;
-			sq_getfloat(v, -1, &val);
-			return write_float( writefct, user, val);
+			sq_getfloat(ctx->v, -1, &val);
+			return write_float( ctx, val);
 		}
 		//case OT_USERPOINTER:
 		//	pf(v,_SC("[%s] USERPOINTER\n"),name);
@@ -380,95 +434,95 @@ SQRESULT sqt_serbin_write( HSQUIRRELVM v, SQWRITEFUNC writefct, SQUserPointer us
 		case OT_STRING: {
 			const SQChar *s;
 			SQUnsignedInteger len;
-			sq_getstring(v,-1,&s);
+			sq_getstring(ctx->v,-1,&s);
 			len = scstrlen( s);
 			if( len <= 0x7F) {
 				b = (uint8_t)len;
-				if( writefct( user, &b, 1) != 1)
+				if( ctx->writefct( ctx->user, &b, 1) != 1)
 					return SQ_ERROR;
 			}
 			else {
-				if( SQ_FAILED( write_unsigned( writefct, user, 0xC8, len)))
+				if( SQ_FAILED( write_unsigned( ctx, 0xC8, len)))
 					return SQ_ERROR;
 			}
-			if( writefct( user, s, len) == len)
+			if( ctx->writefct( ctx->user, (SQUserPointer)s, len) == len)
 				return SQ_OK;
 			return SQ_ERROR;
 		}
 		case OT_TABLE: {
-			SQUnsignedInteger len = sq_getsize(v,-1);
+			SQUnsignedInteger len = sq_getsize(ctx->v,-1);
 			if( len <= 0x1F) {
 				b = 0xA0 | (uint8_t)len;
-				if( writefct( user, &b, 1) != 1)
+				if( ctx->writefct( ctx->user, &b, 1) != 1)
 					return SQ_ERROR;
 			}
 			else {
-				if( SQ_FAILED( write_unsigned( writefct, user, 0xD0, len)))
+				if( SQ_FAILED( write_unsigned( ctx, 0xD0, len)))
 					return SQ_ERROR;
 			}
-			sq_pushnull(v);														// table, iterator
-			while(SQ_SUCCEEDED(sq_next(v,-2)))									// table, iterator, key, value
+			sq_pushnull(ctx->v);												// table, iterator
+			while(SQ_SUCCEEDED(sq_next(ctx->v,-2)))								// table, iterator, key, value
 			{
-				sq_push(v,-2);													// table, iterator, key, value, key
-				if( SQ_SUCCEEDED( sqt_serbin_write( v, writefct, user))) {		// table, iterator, key, value, key
-					sq_poptop(v);												// table, iterator, key, value
-					if( SQ_SUCCEEDED( sqt_serbin_write( v, writefct, user))) {	// table, iterator, key, value
-						sq_pop(v,2);											// table, iterator
+				sq_push(ctx->v,-2);												// table, iterator, key, value, key
+				if( SQ_SUCCEEDED( sqt_serbin_write( ctx))) {                    // table, iterator, key, value, key
+					sq_poptop(ctx->v);											// table, iterator, key, value
+					if( SQ_SUCCEEDED( sqt_serbin_write( ctx))) {                // table, iterator, key, value
+						sq_pop(ctx->v,2);										// table, iterator
 					}
 					else {														// table, iterator, key, value
-						sq_pop(v,3);											// table
+						sq_pop(ctx->v,3);										// table
 						return SQ_ERROR;
 					}
 				}
 				else {															// table, iterator, key, value, key
-					sq_pop(v,4);												// table
+					sq_pop(ctx->v,4);											// table
 					return SQ_ERROR;
 				}
 			}																	// table, iterator
-			sq_pop(v,1);														// table
+			sq_pop(ctx->v,1);													// table
 			return SQ_OK;
 		}
 		case OT_ARRAY: {
-			SQUnsignedInteger len = sq_getsize(v,-1);
+			SQUnsignedInteger len = sq_getsize(ctx->v,-1);
 			if( len <= 0x1F) {
 				b = 0x80 | (uint8_t)len;
-				if( writefct( user, &b, 1) != 1)
+				if( ctx->writefct( ctx->user, &b, 1) != 1)
 					return SQ_ERROR;
 			}
 			else {
-				if( SQ_FAILED( write_unsigned( writefct, user, 0xD8, len)))
+				if( SQ_FAILED( write_unsigned( ctx, 0xD8, len)))
 					return SQ_ERROR;
 			}
-			sq_pushnull(v);														// array, iterator
-			while(SQ_SUCCEEDED(sq_next(v,-2)))									// array, iterator, key, value
+			sq_pushnull(ctx->v);												// array, iterator
+			while(SQ_SUCCEEDED(sq_next(ctx->v,-2)))								// array, iterator, key, value
 			{
-				if( SQ_SUCCEEDED(sqt_serbin_write( v, writefct, user))) {		// array, iterator, key, value
-					sq_pop(v,2);												// array, iterator
+				if( SQ_SUCCEEDED(sqt_serbin_write( ctx))) {                     // array, iterator, key, value
+					sq_pop(ctx->v,2);											// array, iterator
 				}
 				else {															// array, iterator, key, value
-					sq_pop(v,3);												// array
+					sq_pop(ctx->v,3);											// array
 					return SQ_ERROR;
 				}
 			}																	// array, iterator
-			sq_pop(v,1);														// array
+			sq_pop(ctx->v,1);													// array
 			return SQ_OK;
 		}
 		case OT_BOOL: {
 			SQBool bval;
-			sq_getbool(v,-1,&bval);
+			sq_getbool(ctx->v,-1,&bval);
 			b = bval ? 0xF1 : 0xF0;
-			if( writefct( user, &b, 1) == 1)
+			if( ctx->writefct( ctx->user, &b, 1) == 1)
 				return SQ_OK;
 			return SQ_ERROR;
 		}
 		case OT_INSTANCE: {
 			SQUserPointer ptr;
-			if( SQ_SUCCEEDED( sqstd_getblob(v, -1, &ptr))) {
+			if( SQ_SUCCEEDED( sqstd_getblob(ctx->v, -1, &ptr))) {
 				// write blob
-				SQUnsignedInteger len = sqstd_getblobsize(v,-1);
-				if( SQ_FAILED( write_unsigned( writefct, user, 0xC0, len)))
+				SQUnsignedInteger len = sqstd_getblobsize(ctx->v,-1);
+				if( SQ_FAILED( write_unsigned( ctx, 0xC0, len)))
 					return SQ_ERROR;
-				if( writefct( user, ptr, len) == len)
+				if( ctx->writefct( ctx->user, ptr, len) == len)
 					return SQ_OK;
 			}
 			return SQ_ERROR;
@@ -506,13 +560,35 @@ static SQInteger _g_serbin_loaddata(HSQUIRRELVM v)
 {
 	SQFILE file;
     SQBool printerror = SQFalse;
+    read_ctx_t ctx;
+    uint32_t magic;
     if(sq_gettop(v) >= 3) {
         sq_getbool(v,3,&printerror);
     }
     if( SQ_FAILED( sq_getinstanceup( v,2,(SQUserPointer*)&file,(SQUserPointer)SQSTD_STREAM_TYPE_TAG))) {
         return sq_throwerror(v,_SC("invalid argument type"));
 	}
-	if(SQ_SUCCEEDED(sqt_serbin_read(v,sqt_SQFILEREADFUNC,file)))
+    
+    ctx.flags = 0;
+    ctx.v = v;
+    ctx.readfct = sqt_SQFILEREADFUNC;
+    ctx.user = file;
+    
+    if( ctx.readfct( ctx.user, &magic, sizeof(magic)) != sizeof(magic)) {
+        return SQ_ERROR;
+    }
+    
+    if( magic == MAGIC_NORMAL) {
+        // ok
+    }
+    else if( magic == MAGIC_SWAP) {
+        ctx.flags |= SBF_SWAP;
+    }
+    else {
+        return sq_throwerror(v,_SC("bad magic value"));
+    }
+    
+	if(SQ_SUCCEEDED(sqt_serbin_read( &ctx)))
 		return 1;
     return SQ_ERROR; //propagates the error
 }
@@ -520,11 +596,25 @@ static SQInteger _g_serbin_loaddata(HSQUIRRELVM v)
 static SQInteger _g_serbin_savedata(HSQUIRRELVM v)
 {
 	SQFILE file;
+    write_ctx_t ctx;
+    uint32_t magic;
     if( SQ_FAILED( sq_getinstanceup( v,2,(SQUserPointer*)&file,(SQUserPointer)SQSTD_STREAM_TYPE_TAG))) {
         return sq_throwerror(v,_SC("invalid argument type"));
 	}
-	if(SQ_SUCCEEDED(sqt_serbin_write(v,sqt_SQFILEWRITEFUNC, file)))
+    
+    ctx.flags = 0;
+    ctx.v = v;
+    ctx.writefct = sqt_SQFILEWRITEFUNC;
+    ctx.user = file;
+    
+    magic = MAGIC_NORMAL;
+    if( ctx.writefct( ctx.user, &magic, sizeof(magic)) != sizeof(magic)) {
+        return SQ_ERROR;
+    }
+    
+	if(SQ_SUCCEEDED(sqt_serbin_write( &ctx))) {
 		return 1;
+    }
     return SQ_ERROR; //propagates the error
 }
 
