@@ -23,6 +23,7 @@ endif
 
 #CFLAGS+=-O2
 CFLAGS+=-g
+#CFLAGS+=-p -fprofile-arcs -ftest-coverage
 CFLAGS+=-Wall -fno-strict-aliasing
 CXXFLAGS:=-fno-exceptions -fno-rtti
 
@@ -97,5 +98,5 @@ OUT_DIRS:
 
 clean:
 	rm -rf $(EXE_DIR)
-	
+
 .PHONY: nothing all clean OUT_DIRS
