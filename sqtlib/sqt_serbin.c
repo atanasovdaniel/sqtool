@@ -48,6 +48,12 @@ typedef struct
     HSQUIRRELVM v;
 } write_ctx_t;
 
+static const SQChar ERR_MSG_READ[] = _SC("read failed");
+static const SQChar ERR_MSG_WRITE[] = _SC("write failed");
+static const SQChar ERR_MSG_MAGIC[] = _SC("bad magic value");
+static const SQChar ERR_MSG_OBJECT_TYPE[]   = _SC("non-serializable object type");
+static const SQChar ERR_MSG_ARG_NO_STREAM[] = _SC("argument is not a stream");
+
 #define DEF_BSWAP( _T) \
 _T bswap_##_T( _T val) { \
     _T retVal; \
@@ -70,7 +76,7 @@ static DEF_BSWAP( double)
 static SQRESULT read_bytes( const read_ctx_t *ctx, SQUserPointer ptr, SQInteger len)
 {
     if( ctx->readfct( ctx->user, ptr, len) != len) {
-        return sq_throwerror(ctx->v,_SC("read failed"));
+        return sq_throwerror(ctx->v,ERR_MSG_READ);
     }
     return SQ_OK;
 }
@@ -299,7 +305,7 @@ rd_blob: {
 static SQRESULT write_bytes( const write_ctx_t *ctx, const SQUserPointer ptr, SQInteger len)
 {
 	if( ctx->writefct( ctx->user, ptr, len) != len) {
-        return sq_throwerror(ctx->v,_SC("write failed"));
+        return sq_throwerror(ctx->v,ERR_MSG_WRITE);
     }
     return SQ_OK;
 }
@@ -496,7 +502,7 @@ SQRESULT sqt_serbin_write( const write_ctx_t *ctx)
 					return SQ_ERROR;
                 return write_bytes(ctx, ptr, len);
 			}
-			return SQ_ERROR;
+			//return SQ_ERROR;
 		}
 		//case OT_CLOSURE:
 		//case OT_NATIVECLOSURE:
@@ -507,7 +513,7 @@ SQRESULT sqt_serbin_write( const write_ctx_t *ctx)
 		//case OT_CLASS:
 		//case OT_WEAKREF:
 		default:
-			return SQ_ERROR;
+			return sq_throwerror(ctx->v,ERR_MSG_OBJECT_TYPE);
 	}
 }
 
@@ -518,7 +524,7 @@ static SQInteger _g_serbin_loaddata(HSQUIRRELVM v)
     uint32_t magic;
     
     if( SQ_FAILED( sq_getinstanceup( v,2,(SQUserPointer*)&file,(SQUserPointer)SQSTD_STREAM_TYPE_TAG))) {
-        return sq_throwerror(v,_SC("invalid argument type"));
+        return sq_throwerror(v,ERR_MSG_ARG_NO_STREAM);
 	}
     
     ctx.flags = 0;
@@ -545,7 +551,7 @@ static SQInteger _g_serbin_loaddata(HSQUIRRELVM v)
         ctx.flags |= SBF_SWAP;
     }
     else {
-        return sq_throwerror(v,_SC("bad magic value"));
+        return sq_throwerror(v,ERR_MSG_MAGIC);
     }
     
 	if(SQ_SUCCEEDED(sqt_serbin_read( &ctx)))
@@ -559,7 +565,7 @@ static SQInteger _g_serbin_savedata(HSQUIRRELVM v)
     write_ctx_t ctx;
     uint32_t magic;
     if( SQ_FAILED( sq_getinstanceup( v,2,(SQUserPointer*)&file,(SQUserPointer)SQSTD_STREAM_TYPE_TAG))) {
-        return sq_throwerror(v,_SC("invalid argument type"));
+        return sq_throwerror(v,ERR_MSG_ARG_NO_STREAM);
 	}
     
 //     if( sq_gettop(v) > 3)

@@ -43,7 +43,8 @@ static const SQChar ERR_MSG_BAD_ESCAPE[]    = _SC("BAD escape sequence");
 static const SQChar ERR_MSG_STR_NEWLINE[]   = _SC("newline in string");
 static const SQChar ERR_MSG_DELIMER[]       = _SC("expecting delimer");
 static const SQChar ERR_MSG_PAIR_DELIMER[]  = _SC("expecting pair delimer");
-static const SQChar ERR_MSG_ARG_NO_STREAM[] = _SC("invalid argument type");
+static const SQChar ERR_MSG_ARG_NO_STREAM[] = _SC("argument is not a stream");
+static const SQChar ERR_MSG_OBJECT_TYPE[]   = _SC("non-serializable object type");
 
 // static const SQChar ERR_MSG[] = = _SC("EOF in comment");
 #define ERR_MSG_EOF_COMMENT ERR_MSG_EOF
@@ -129,37 +130,48 @@ static SQRESULT sqt_serjson_write( write_ctx_t *ctx)
 	switch(sq_gettype(ctx->v,-1))
 	{
 		case OT_NULL: {
-            if( SQ_FAILED(write_check(ctx, _SC("null"), 4*sizeof(SQChar)))) {
-    			return SQ_ERROR;
-            }
-			return SQ_OK;
+            return write_check(ctx, _SC("null"), 4*sizeof(SQChar));
+            //if( SQ_FAILED(write_check(ctx, _SC("null"), 4*sizeof(SQChar)))) {
+    		//	return SQ_ERROR;
+            //}
+			//return SQ_OK;
 		}
 		case OT_BOOL: {
 			SQBool bval;
 			sq_getbool(ctx->v,-1,&bval);
             if( bval) {
-                if( SQ_FAILED(write_check(ctx, _SC("true"), 4*sizeof(SQChar))))
-                    return SQ_ERROR;
+                return write_check(ctx, _SC("true"), 4*sizeof(SQChar));
             }
             else {
-                if( SQ_FAILED(write_check(ctx, _SC("false"), 5*sizeof(SQChar))))
-                    return SQ_ERROR;
+                return write_check(ctx, _SC("false"), 5*sizeof(SQChar));
             }
-            return SQ_OK;
+            //if( bval) {
+            //    if( SQ_FAILED(write_check(ctx, _SC("true"), 4*sizeof(SQChar))))
+            //        return SQ_ERROR;
+            //}
+            //else {
+            //    if( SQ_FAILED(write_check(ctx, _SC("false"), 5*sizeof(SQChar))))
+            //        return SQ_ERROR;
+            //}
+            //return SQ_OK;
 		}
 		case OT_INTEGER:
 		case OT_FLOAT: {
 			const SQChar *s;
             SQInteger size;
+            SQRESULT r;
             sq_tostring(ctx->v,-1);
 			//sq_getstringandsize(ctx->v,-1,&s,&size);
             sq_getstring(ctx->v,-1,&s); size = scstrlen(s);
-            if( SQ_FAILED(write_check(ctx, s, size))) {
-                sq_poptop(ctx->v);
-                return SQ_ERROR;
-            }
+            r = write_check(ctx, s, size);
             sq_poptop(ctx->v);
-            return SQ_OK;
+            return r;
+            //if( SQ_FAILED(write_check(ctx, s, size))) {
+            //    sq_poptop(ctx->v);
+            //    return SQ_ERROR;
+            //}
+            //sq_poptop(ctx->v);
+            //return SQ_OK;
 		}
 		case OT_STRING: {
 			const SQChar *s;
@@ -169,9 +181,10 @@ static SQRESULT sqt_serjson_write( write_ctx_t *ctx)
                 return SQ_ERROR;
             if( SQ_FAILED( json_escape( ctx, s)))
 				return SQ_ERROR;
-            if( SQ_FAILED(write_check(ctx, &q, sizeof(q))))
-                return SQ_ERROR;
-			return SQ_OK;
+            return write_check(ctx, &q, sizeof(q));
+            //if( SQ_FAILED(write_check(ctx, &q, sizeof(q))))
+            //    return SQ_ERROR;
+			//return SQ_OK;
 		}
 		case OT_TABLE: {
 			SQUnsignedInteger left = sq_getsize(ctx->v,-1);
@@ -225,9 +238,10 @@ static SQRESULT sqt_serjson_write( write_ctx_t *ctx)
             if( SQ_FAILED( nl_indent( ctx)))
 				return SQ_ERROR;
             q = _SC('}');
-			if( SQ_FAILED(write_check(ctx, &q, sizeof(q))))
-				return SQ_ERROR;
-			return SQ_OK;
+            return write_check(ctx, &q, sizeof(q));
+			//if( SQ_FAILED(write_check(ctx, &q, sizeof(q))))
+			//	return SQ_ERROR;
+			//return SQ_OK;
 		}
 		case OT_ARRAY: {
 			SQUnsignedInteger left = sq_getsize(ctx->v,-1);
@@ -265,9 +279,10 @@ static SQRESULT sqt_serjson_write( write_ctx_t *ctx)
             if( SQ_FAILED( nl_indent( ctx)))
 				return SQ_ERROR;
             q = _SC(']');
-			if( SQ_FAILED(write_check(ctx, &q, sizeof(q))))
-				return SQ_ERROR;
-			return SQ_OK;
+            return write_check(ctx, &q, sizeof(q));
+			//if( SQ_FAILED(write_check(ctx, &q, sizeof(q))))
+			//	return SQ_ERROR;
+			//return SQ_OK;
 		}
 		//case OT_INSTANCE:
 		//case OT_CLOSURE:
@@ -279,7 +294,7 @@ static SQRESULT sqt_serjson_write( write_ctx_t *ctx)
 		//case OT_CLASS:
 		//case OT_WEAKREF:
 		default:
-			return SQ_ERROR;
+			return sq_throwerror(ctx->v,ERR_MSG_OBJECT_TYPE);
 	}
 }
 
