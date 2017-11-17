@@ -268,6 +268,40 @@ function test_save_ok( val, test_res)
     test_save_opt_ok( val, def_save_opts, test_res);
 }
 
+function test_save_float_opt_ok( val, opt)
+{
+    print( "-------\n");
+    print( "val:"); dump(val); print("\n");
+    local b = blob();
+    if( opt == null)
+    {
+        savejson( b, val);
+    }
+    else
+    {
+        savejson( b, val, opt);
+    }
+    b.seek(0);
+    local res = "";
+    while( !b.eos())
+    {
+        res += b.readline();
+    }
+    print( "res:<<" + escape(res) + ">>\n");
+    b.seek(0);
+    res = loadjson( b);
+    if( res != val)
+    {
+        pr_err( "No match\n");
+    }
+}
+
+function test_save_float_ok( val)
+{
+    test_save_float_opt_ok( val, def_save_opts);
+}
+
+
 if( 1) {
 
 // integer
@@ -440,11 +474,18 @@ test_save_ok( 123, "123\n");
 test_save_ok( -123, "-123\n");
 
 // float
-test_save_ok( 123.0, "123\n");  // float is lost
-test_save_ok( -123.0, "-123\n");  // float is lost
-test_save_ok( 12.3, "12.3\n");
-test_save_ok( -12.3, "-12.3\n");
-test_save_ok( 1.2e5, "120000\n");   // float is lost
+test_save_ok( 123.0, "123.0\n");
+test_save_ok( -123.0, "-123.0\n");
+test_save_float_ok( 12.3);
+test_save_float_ok( 12.3);
+test_save_float_ok( -12.3);
+test_save_float_ok( 1.2e5);
+test_save_float_ok( 1.2e15);
+test_save_float_ok( 1.2e-15);
+test_save_float_ok( 123456789012345.0);
+test_save_float_ok( 1e999);
+test_save_float_ok( -1e999);
+test_save_float_ok( PI);
 
 }
 

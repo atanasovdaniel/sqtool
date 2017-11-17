@@ -2,14 +2,24 @@
 #include <string.h>
 #include <ctype.h>
 #include <stdlib.h>
+#include <stdio.h>  // snprintf
+#include <math.h>   // isinf, isnan
 
 #include <squirrel.h>
 #include <sqstdaux.h>
 #include <sqtool.h>
 #include <sqstdio.h>
-#include <sqstdblob.h>
+#include <sqt_serializer.h>
 
 #define STR_STEP    128
+
+#ifdef SQUSEDOUBLE
+#define _PRINT_FLOAT_FMT _SC("%.17g")
+#define MAX_FLOAT_STR_SIZE  50
+#else // SQUSEDOUBLE
+#define _PRINT_FLOAT_FMT _SC("%.9g")
+#define MAX_FLOAT_STR_SIZE  50
+#endif // SQUSEDOUBLE
 
 typedef struct
 {
@@ -60,7 +70,8 @@ static const SQChar ERR_MSG_OBJECT_TYPE[]   = _SC("non-serializable object type"
 
 static SQRESULT write_check( const write_ctx_t *ctx, const SQChar *ptr, SQInteger len)
 {
-    if( ctx->writefct( ctx->user, ptr, len) == len) {
+    // warning: passing argument 2 of ‘ctx->writefct’ discards ‘const’ qualifier from pointer target type
+    if( ctx->writefct( ctx->user, (SQUserPointer)ptr, len) == len) {
         return SQ_OK;
     }
 	return SQ_ERROR;
@@ -132,10 +143,6 @@ static SQRESULT sqt_serjson_write( write_ctx_t *ctx)
 	{
 		case OT_NULL: {
             return write_check(ctx, _SC("null"), 4*sizeof(SQChar));
-            //if( SQ_FAILED(write_check(ctx, _SC("null"), 4*sizeof(SQChar)))) {
-    		//	return SQ_ERROR;
-            //}
-			//return SQ_OK;
 		}
 		case OT_BOOL: {
 			SQBool bval;
@@ -146,18 +153,8 @@ static SQRESULT sqt_serjson_write( write_ctx_t *ctx)
             else {
                 return write_check(ctx, _SC("false"), 5*sizeof(SQChar));
             }
-            //if( bval) {
-            //    if( SQ_FAILED(write_check(ctx, _SC("true"), 4*sizeof(SQChar))))
-            //        return SQ_ERROR;
-            //}
-            //else {
-            //    if( SQ_FAILED(write_check(ctx, _SC("false"), 5*sizeof(SQChar))))
-            //        return SQ_ERROR;
-            //}
-            //return SQ_OK;
 		}
-		case OT_INTEGER:
-		case OT_FLOAT: {
+		case OT_INTEGER: {
 			const SQChar *s;
             SQInteger size;
             SQRESULT r;
@@ -166,13 +163,34 @@ static SQRESULT sqt_serjson_write( write_ctx_t *ctx)
             r = write_check(ctx, s, size);
             sq_poptop(ctx->v);
             return r;
-            //if( SQ_FAILED(write_check(ctx, s, size))) {
-            //    sq_poptop(ctx->v);
-            //    return SQ_ERROR;
-            //}
-            //sq_poptop(ctx->v);
-            //return SQ_OK;
 		}
+		case OT_FLOAT: {
+            SQFloat val;
+            SQChar *buf = sq_getscratchpad(ctx->v,MAX_FLOAT_STR_SIZE);
+            SQChar *p = buf;
+            int is_flt = 0;
+            sq_getfloat(ctx->v,-1, &val);
+            if( !isinf(val)) {
+                if( isnan(val)) val = 0.0;  // NaN --> 0
+                scsprintf( buf, MAX_FLOAT_STR_SIZE-3, _PRINT_FLOAT_FMT, val);
+                while( *p != _SC('\0')) {
+                     is_flt = is_flt || (*p == _SC('.')) || (*p == _SC('e')) || (*p == _SC('E'));
+                     p++;
+                }
+                if( !is_flt) {
+                    *(p++) = _SC('.');
+                    *(p++) = _SC('0');
+                    *p = _SC('\0');
+                }
+                return write_check(ctx, buf, (p - buf)*sizeof(SQChar));
+            }
+            else {
+                if( isinf(val) > 0)
+                    return write_check(ctx, _SC("1e999"), 5*sizeof(SQChar));    // Inf --> 1e999
+                else
+                    return write_check(ctx, _SC("-1e999"), 6*sizeof(SQChar));   // -Inf --> -1e999
+            }
+        }
 		case OT_STRING: {
 			const SQChar *s;
             SQChar q = _SC('"');
@@ -182,9 +200,6 @@ static SQRESULT sqt_serjson_write( write_ctx_t *ctx)
             if( SQ_FAILED( json_escape( ctx, s)))
 				return SQ_ERROR;
             return write_check(ctx, &q, sizeof(q));
-            //if( SQ_FAILED(write_check(ctx, &q, sizeof(q))))
-            //    return SQ_ERROR;
-			//return SQ_OK;
 		}
 		case OT_TABLE: {
 			SQUnsignedInteger left = sq_getsize(ctx->v,-1);
@@ -239,9 +254,6 @@ static SQRESULT sqt_serjson_write( write_ctx_t *ctx)
 				return SQ_ERROR;
             q = _SC('}');
             return write_check(ctx, &q, sizeof(q));
-			//if( SQ_FAILED(write_check(ctx, &q, sizeof(q))))
-			//	return SQ_ERROR;
-			//return SQ_OK;
 		}
 		case OT_ARRAY: {
 			SQUnsignedInteger left = sq_getsize(ctx->v,-1);
@@ -280,9 +292,6 @@ static SQRESULT sqt_serjson_write( write_ctx_t *ctx)
 				return SQ_ERROR;
             q = _SC(']');
             return write_check(ctx, &q, sizeof(q));
-			//if( SQ_FAILED(write_check(ctx, &q, sizeof(q))))
-			//	return SQ_ERROR;
-			//return SQ_OK;
 		}
 		//case OT_INSTANCE:
 		//case OT_CLOSURE:
@@ -483,11 +492,12 @@ static SQRESULT sqt_serjson_read( read_ctx_t *ctx)
                 else if( c == _SC('u')) {
                     // unicode
                     SQChar hex[4];
+                    int i;
                     SQUnsignedInteger code;
                     if( ctx->readfct( ctx->user, &hex, sizeof(hex)) != sizeof(hex)) {
                         return sq_throwerror(ctx->v,ERR_MSG_EOF_STRING);
                     }
-                    for( int i=0; i < sizeof(hex); i++) {
+                    for( i=0; i < sizeof(hex); i++) {
                         if( scisxdigit(hex[i])) {
                             if( hex[i] >= _SC('a')) { hex[i] -= _SC('a') - 10; }
                             else if( hex[i] >= _SC('A')) { hex[i] -= _SC('A') - 10; }
@@ -644,44 +654,55 @@ static SQRESULT sqt_serjson_read( read_ctx_t *ctx)
     return SQ_OK;
 }
 
-static SQInteger _g_serjson_loadjson(HSQUIRRELVM v)
+
+SQRESULT sqt_serjson_load_cb(HSQUIRRELVM v, const SQChar *opts, SQREADFUNC readfct, SQUserPointer user)
 {
-	SQFILE file;
     read_ctx_t ctx;
+    
+    ctx.v = v;
+    ctx.readfct = readfct;
+    ctx.user = user;
+    ctx.back_char = 0;
+    
+	return sqt_serjson_read( &ctx);
+}
+
+SQRESULT sqt_serjson_load(HSQUIRRELVM v, const SQChar *opts, SQFILE file)
+{
+    return sqt_serjson_load_cb(v, opts, sqstd_FILEREADFUNC, file);
+}
+
+static SQRESULT _g_serjson_loadjson(HSQUIRRELVM v)
+{
+                                        // this stream opts...
+	SQFILE file;
+    const SQChar *opts = _SC("");
 
     if( SQ_FAILED( sq_getinstanceup( v,2,(SQUserPointer*)&file,(SQUserPointer)SQSTD_STREAM_TYPE_TAG))) {
         return sq_throwerror(v,ERR_MSG_ARG_NO_STREAM);
 	}
     
-//     if( sq_gettop(v) > 2)
-//     {
-//         const SQChar *c;
-//         sq_getstring(v,3,&c);
-//         //...
-//         sq_settop(v,2);
-//     }
+    if( sq_gettop(v) > 2)
+    {
+        sq_getstring(v,3,&opts);
+    }
     
-    ctx.v = v;
-    ctx.readfct = sqstd_FILEREADFUNC;
-    ctx.user = file;
-    ctx.back_char = 0;
-    
-	if(SQ_SUCCEEDED(sqt_serjson_read( &ctx)))
+	if(SQ_SUCCEEDED(sqt_serjson_load(v, opts, file))) {
+                                        // this stream opts... data
 		return 1;
+    }
     return SQ_ERROR; //propagates the error
 }
 
-static SQInteger _g_serjson_savejson(HSQUIRRELVM v)
+
+SQRESULT sqt_serjson_save_cb( HSQUIRRELVM v, const SQChar *opts, SQWRITEFUNC writefct, SQUserPointer user)
 {
-	SQFILE file;
     write_ctx_t ctx;
-    if( SQ_FAILED( sq_getinstanceup( v,2,(SQUserPointer*)&file,(SQUserPointer)SQSTD_STREAM_TYPE_TAG))) {
-        return sq_throwerror(v,ERR_MSG_ARG_NO_STREAM);
-	}
+    const SQChar *c = opts;
     
     ctx.v = v;
-    ctx.writefct = sqstd_FILEWRITEFUNC;
-    ctx.user = file;
+    ctx.writefct = writefct;
+    ctx.user = user;
     
     ctx.ind = 0;
     
@@ -691,53 +712,71 @@ static SQInteger _g_serjson_savejson(HSQUIRRELVM v)
     ctx.str_ind = _SC("\t");
     ctx.str_ind_len = 1;
     
-    if( sq_gettop(v) > 3)
+    while( *c)
     {
-        const SQChar *c;
-        sq_getstring(v,4,&c);
-        
-        while( *c)
-        {
-            if( (c[0] == _SC('i')) && c[1]) {   // Indentation char
-                c++;
-                if( *c == _SC('t')) {
-                    ctx.str_ind = _SC("\t");    // use Tab
-                    ctx.str_ind_len = 1;
-                }
-                else if( *c == _SC('s')) {      // use Space
-                    ctx.str_ind = _SC(" ");
-                    ctx.str_ind_len = 1;
-                }
-                else if( *c == _SC('-')) {      // do not indent
-                    ctx.str_ind = _SC("");
-                    ctx.str_ind_len = 0;
-                }
-            }
-            else if( (c[0] == _SC('l')) && c[1]) {  // New Line style
-                c++;
-                if( *c == _SC('c')) {       // C style - \n
-                    ctx.str_nl = _SC("\n");
-                    ctx.str_nl_len = 1;
-                }
-                else if( *c == _SC('p')) {  // Printer style \r\n
-                    ctx.str_nl = _SC("\r\n");
-                    ctx.str_nl_len = 2;
-                }
-                else if( *c == _SC('-')) {  // no new line
-                    ctx.str_nl = _SC("");
-                    ctx.str_nl_len = 0;
-                }
-            }
+        if( (c[0] == _SC('i')) && c[1]) {   // Indentation char
             c++;
+            if( *c == _SC('t')) {
+                ctx.str_ind = _SC("\t");    // use Tab
+                ctx.str_ind_len = 1;
+            }
+            else if( *c == _SC('s')) {      // use Space
+                ctx.str_ind = _SC(" ");
+                ctx.str_ind_len = 1;
+            }
+            else if( *c == _SC('-')) {      // do not indent
+                ctx.str_ind = _SC("");
+                ctx.str_ind_len = 0;
+            }
         }
-        
-        sq_settop(v,3);
+        else if( (c[0] == _SC('l')) && c[1]) {  // New Line style
+            c++;
+            if( *c == _SC('c')) {       // C style - \n
+                ctx.str_nl = _SC("\n");
+                ctx.str_nl_len = 1;
+            }
+            else if( *c == _SC('p')) {  // Printer style \r\n
+                ctx.str_nl = _SC("\r\n");
+                ctx.str_nl_len = 2;
+            }
+            else if( *c == _SC('-')) {  // no new line
+                ctx.str_nl = _SC("");
+                ctx.str_nl_len = 0;
+            }
+        }
+        c++;
     }
     
-	if(SQ_SUCCEEDED(sqt_serjson_write( &ctx))) {
-        if( SQ_FAILED(write_check(&ctx, ctx.str_nl, ctx.str_nl_len)))
+	if(SQ_FAILED(sqt_serjson_write( &ctx))) {
             return SQ_ERROR;
-		return 1;
+    }
+    return write_check(&ctx, ctx.str_nl, ctx.str_nl_len);
+}
+
+SQRESULT sqt_serjson_save( HSQUIRRELVM v, const SQChar *opts, SQFILE file)
+{
+    return sqt_serjson_save_cb(v, opts, sqstd_FILEWRITEFUNC, file);
+}
+
+static SQRESULT _g_serjson_savejson(HSQUIRRELVM v)
+{
+                                // this stream data opts...
+	SQFILE file;
+    const SQChar *opts = _SC("");
+
+    if( SQ_FAILED( sq_getinstanceup( v,2,(SQUserPointer*)&file,(SQUserPointer)SQSTD_STREAM_TYPE_TAG))) {
+        return sq_throwerror(v,ERR_MSG_ARG_NO_STREAM);
+	}
+    
+    if( sq_gettop(v) > 3)
+    {
+        sq_push(v,3);           // this stream data opts... data
+        sq_remove(v,3);         // this stream opts... data
+        sq_getstring(v,3,&opts);
+    }
+    
+	if(SQ_SUCCEEDED(sqt_serjson_save(v,opts,file))) {
+		return 0;   // no return value
     }
     return SQ_ERROR; //propagates the error
 }

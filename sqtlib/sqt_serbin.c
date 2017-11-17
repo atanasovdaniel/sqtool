@@ -6,6 +6,7 @@
 #include <sqtool.h>
 #include <sqstdio.h>
 #include <sqstdblob.h>
+#include <sqt_serializer.h>
 
 #define MAGIC_NORMAL    0x01534244L
 #define MAGIC_SWAP      0x44425301L
@@ -55,9 +56,10 @@ static const SQChar ERR_MSG_ARG_NO_STREAM[] = _SC("argument is not a stream");
 #define DEF_BSWAP( _T) \
 _T bswap_##_T( _T val) { \
     _T retVal; \
+    int i; \
     char *pVal = (char*)&val; \
     char *pRetVal = (char*)&retVal; \
-    for(int i=0; i<sizeof(_T); i++) { \
+    for( i=0; i<sizeof(_T); i++) { \
         pRetVal[sizeof(_T)-1-i] = pVal[i]; \
     } \
     return retVal; \
@@ -514,28 +516,16 @@ SQRESULT sqt_serbin_write( const write_ctx_t *ctx)
 	}
 }
 
-static SQInteger _g_serbin_loaddata(HSQUIRRELVM v)
+
+SQRESULT sqt_serbin_load_cb(HSQUIRRELVM v, const SQChar *opts, SQREADFUNC readfct, SQUserPointer user)
 {
-	SQFILE file;
     read_ctx_t ctx;
     uint32_t magic;
     
-    if( SQ_FAILED( sq_getinstanceup( v,2,(SQUserPointer*)&file,(SQUserPointer)SQSTD_STREAM_TYPE_TAG))) {
-        return sq_throwerror(v,ERR_MSG_ARG_NO_STREAM);
-	}
-    
     ctx.flags = 0;
     ctx.v = v;
-    ctx.readfct = sqstd_FILEREADFUNC;
-    ctx.user = file;
-    
-//     if( sq_gettop(v) > 2)
-//     {
-//         const SQChar *c;
-//         sq_getstring(v,3,&c);
-//         //...
-//         sq_settop(v,2);
-//     }
+    ctx.readfct = readfct;
+    ctx.user = user;
     
     if( SQ_FAILED(read_bytes(&ctx, &magic, sizeof(magic)))) {
         return SQ_ERROR;
@@ -551,49 +541,87 @@ static SQInteger _g_serbin_loaddata(HSQUIRRELVM v)
         return sq_throwerror(v,ERR_MSG_MAGIC);
     }
     
-	if(SQ_SUCCEEDED(sqt_serbin_read( &ctx)))
-		return 1;
-    return SQ_ERROR; //propagates the error
+	return sqt_serbin_read( &ctx);
 }
 
-static SQInteger _g_serbin_savedata(HSQUIRRELVM v)
+SQRESULT sqt_serbin_load(HSQUIRRELVM v, const SQChar *opts, SQFILE file)
 {
+    return sqt_serbin_load_cb(v, opts, sqstd_FILEREADFUNC, file);
+}
+
+static SQRESULT _g_serbin_loadbinary(HSQUIRRELVM v)
+{
+                                // this stream opts...
 	SQFILE file;
-    write_ctx_t ctx;
-    uint32_t magic;
+    const SQChar *opts = 0;
+    
     if( SQ_FAILED( sq_getinstanceup( v,2,(SQUserPointer*)&file,(SQUserPointer)SQSTD_STREAM_TYPE_TAG))) {
         return sq_throwerror(v,ERR_MSG_ARG_NO_STREAM);
 	}
     
-//     if( sq_gettop(v) > 3)
-//     {
-//         const SQChar *c;
-//         sq_getstring(v,4,&c);
-//         //...
-//         sq_settop(v,3);
-//     }
+    if( sq_gettop(v) > 2)
+    {
+        sq_getstring(v,3,&opts);
+    }
+
+	if(SQ_SUCCEEDED(sqt_serbin_load(v, opts, file))) {
+                                // this stream opts... data
+		return 1;   // return loaded data
+    }
+    return SQ_ERROR; //propagates the error
+}
+
+
+SQRESULT sqt_serbin_save_cb( HSQUIRRELVM v, const SQChar *opts, SQWRITEFUNC writefct, SQUserPointer user)
+{
+    write_ctx_t ctx;
+    uint32_t magic;
     
     ctx.flags = 0;
     ctx.v = v;
-    ctx.writefct = sqstd_FILEWRITEFUNC;
-    ctx.user = file;
+    ctx.writefct = writefct;
+    ctx.user = user;
     
     magic = MAGIC_NORMAL;
     if(SQ_FAILED(write_bytes(&ctx, &magic, sizeof(magic)))) {
         return SQ_ERROR;
     }
     
-	if(SQ_SUCCEEDED(sqt_serbin_write( &ctx))) {
-		return 1;
+	return sqt_serbin_write( &ctx);
+}
+
+SQRESULT sqt_serbin_save( HSQUIRRELVM v, const SQChar *opts, SQFILE file)
+{
+    return sqt_serbin_save_cb(v, opts, sqstd_FILEWRITEFUNC, file);
+}
+
+static SQRESULT _g_serbin_savebinary(HSQUIRRELVM v)
+{
+                                // this stream data opts...
+	SQFILE file;
+    const SQChar *opts = _SC("");
+    
+    if( SQ_FAILED( sq_getinstanceup( v,2,(SQUserPointer*)&file,(SQUserPointer)SQSTD_STREAM_TYPE_TAG))) {
+        return sq_throwerror(v,ERR_MSG_ARG_NO_STREAM);
+	}
+    
+    if( sq_gettop(v) > 3)
+    {
+        sq_push(v,3);           // this stream data opts.. data
+        sq_remove(v,3);         // this stream opts.. data
+        sq_getstring(v,3,&opts);
+    }
+    
+	if(SQ_SUCCEEDED(sqt_serbin_save(v, opts, file))) {
+		return 0;   // no return value
     }
     return SQ_ERROR; //propagates the error
 }
 
-
 #define _DECL_GLOBALSERBIN_FUNC(name,nparams,typecheck) {_SC(#name),_g_serbin_##name,nparams,typecheck}
 static const SQRegFunction _serbin_funcs[]={
-    _DECL_GLOBALSERBIN_FUNC(loaddata,-2,_SC(".xs")),
-    _DECL_GLOBALSERBIN_FUNC(savedata,-3,_SC(".x.s")),
+    _DECL_GLOBALSERBIN_FUNC(loadbinary,-2,_SC(".xs")),
+    _DECL_GLOBALSERBIN_FUNC(savebinary,-3,_SC(".x.s")),
     {NULL,(SQFUNCTION)0,0,NULL}
 };
 
