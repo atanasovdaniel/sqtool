@@ -28,6 +28,8 @@ typedef enum {
     XML_TOK_COMMENT     = _SC('!'),     // <!--`...`-->
 
     XML_TOK_TEXT        = _SC('T'),     // `text` for element content, attribute value and PI body
+    XML_TOK_SPACE       = _SC('S'),     // `spaces` for element content
+    
     XML_TOK_CDATA       = _SC('C'),     // <![CDATA[`...`]]>`
 
     XML_TOK_PI_TARGET   = _SC('?'),     // <?`NAME`
@@ -39,8 +41,8 @@ typedef enum {
 } xml_tok_t;
 
 enum lex_state {
-    XMLSTATE_PROLOG = 0,
-    XMLSTATE_DOCUMENT,
+    //XMLSTATE_PROLOG = 0,
+    XMLSTATE_DOCUMENT = 0,
     XMLSTATE_TAG,
     XMLSTATE_ATTR_VALUE,
     XMLSTATE_COMMENT,
@@ -77,6 +79,7 @@ typedef struct
 
     SQChar quote;
     SQInteger level;
+    SQBool preserve_spaces;
 
     enum lex_state state;
     enum lex_state saved_state;
@@ -158,13 +161,15 @@ static void skip_spaces( read_ctx_t *ctx)
     ctx->back_char = c;
 }
 
-static void normalize_EOL( read_ctx_t *ctx)
+static SQBool normalize_EOL( read_ctx_t *ctx)
 {
     const SQChar *src;
     SQChar *dst;
+    SQBool is_space = SQTrue;
     buf_append(ctx, _SC('\0'));
     src = dst = ctx->buf;
     while( *src != _SC('\0')) {
+        is_space = is_space && XML_IS_S(*src);
         if( src[0] == _SC('\r')) {
             if( src[1] == _SC('\n')) {
                 src++;
@@ -177,6 +182,16 @@ static void normalize_EOL( read_ctx_t *ctx)
         }
     }
     ctx->buf_len = dst - ctx->buf;
+    return is_space;
+}
+
+static SQBool prepare_text( read_ctx_t *ctx)
+{
+    SQBool is_space = normalize_EOL(ctx);
+    if( is_space && !ctx->preserve_spaces) {
+        ctx->buf_len = 0;
+    }
+    return is_space;
 }
 
 static int read_name( read_ctx_t *ctx)
@@ -267,7 +282,7 @@ static xml_tok_t lex_next( read_ctx_t *ctx)
     while(1)
     switch( ctx->state)
     {
-        case XMLSTATE_PROLOG:
+        //case XMLSTATE_PROLOG:
         case XMLSTATE_DOCUMENT:
             c = read_char(ctx);
             if( c == _SC('<')) {
@@ -287,7 +302,13 @@ static xml_tok_t lex_next( read_ctx_t *ctx)
                                 ctx->back_char = c;
                                 ctx->saved_state = ctx->state;
                                 ctx->state = XMLSTATE_PI;
-                                return XML_TOK_PI_TARGET;
+                                if( (ctx->buf_len == 3) &&
+                                    ((ctx->buf[0] == _SC('x')) || (ctx->buf[0] == _SC('X'))) &&
+                                    ((ctx->buf[1] == _SC('m')) || (ctx->buf[1] == _SC('M'))) &&
+                                    ((ctx->buf[2] == _SC('l')) || (ctx->buf[2] == _SC('L'))) )
+                                    return XML_TOK_PI_TARGET;
+                                else
+                                    return XML_TOK_PI_TARGET;
                             }
                         }
                     }
@@ -305,6 +326,7 @@ static xml_tok_t lex_next( read_ctx_t *ctx)
                     else if( c == _SC('[')) {
                         // <![CDATA[ .... ]]>
                         if( read_name(ctx) == 0) {
+                            buf_append(ctx,_SC('\0'));
                             if( scstrcmp( ctx->buf, _SC("CDATA")) == 0) {
                                 c = read_char(ctx);
                                 if( c == _SC('[')) {
@@ -315,7 +337,7 @@ static xml_tok_t lex_next( read_ctx_t *ctx)
                             }
                         }
                     }
-                    else if( ctx->state == XMLSTATE_PROLOG) {
+                    else { // if( ctx->state == XMLSTATE_PROLOG) {
                         // <!DOCTYPE
                         buf_append(ctx,_SC('<'));
                         buf_append(ctx,_SC('!'));
@@ -351,17 +373,27 @@ static xml_tok_t lex_next( read_ctx_t *ctx)
                 return XML_TOK_EOF;
             }
             else {
-                if( ctx->state == XMLSTATE_DOCUMENT) {
+//                 if( ctx->state == XMLSTATE_DOCUMENT) {
                     // text
                     ctx->back_char = c;
                     ctx->state = XMLSTATE_TEXT;
                     continue;
-                }
-                else // if( ctx->state == XMLSTATE_PROLOG)
-                    if( XML_IS_S(c)) {
-                        skip_spaces(ctx);
-                        continue;
-                    }
+//                 }
+//                 else if( XML_IS_S(c)) { // if( ctx->state == XMLSTATE_PROLOG)
+//                     if( !ctx->preserve_spaces) {
+//                         skip_spaces(ctx);
+//                         continue;
+//                     }
+//                     else {
+//                         buf_append(ctx,c);
+//                         while( ((c = read_char(ctx)) != SQ_EOF) && XML_IS_S(c)) {
+//                             buf_append(ctx,c);
+//                         }
+//                         ctx->back_char = c;
+//                         normalize_EOL(ctx);
+//                         return XML_TOK_TEXT;
+//                     }
+//                 }
             }
             ctx->error = XMLERR_UNEXP_CHAR_SEQ;
             ctx->state = XMLSTATE_ERROR;
@@ -408,6 +440,7 @@ static xml_tok_t lex_next( read_ctx_t *ctx)
             }
             if( c == ctx->quote) {
                 ctx->state = XMLSTATE_TAG;
+                normalize_EOL(ctx);
                 return XML_TOK_TEXT;    // return XML_TOK_ATTR_VALUE;
             }
             else if( c == _SC('&')) {
@@ -464,11 +497,19 @@ static xml_tok_t lex_next( read_ctx_t *ctx)
                 else {
                     ctx->back_char = c;
                     ctx->state = XMLSTATE_REF2;
-                    if( ctx->buf_len) {
-                        return XML_TOK_TEXT;
+                    if( ctx->saved_state == XMLSTATE_TEXT ) {
+                        SQBool is_space = prepare_text(ctx);
+                        if( ctx->buf_len) {
+                            return is_space ? XML_TOK_SPACE : XML_TOK_TEXT;
+                        }
                     }
-                    else
-                        continue;
+                    else { // ctx->saved_state == XMLSTATE_ATTR_VALUE
+                        normalize_EOL(ctx);
+                        if( ctx->buf_len) {
+                            return XML_TOK_TEXT;
+                        }
+                    }
+                    continue;
                 }
             }
             if( c == SQ_EOF) {
@@ -499,10 +540,12 @@ static xml_tok_t lex_next( read_ctx_t *ctx)
                 continue;
             }
             else {
+                SQBool is_space;
                 ctx->back_char = c;
                 ctx->state = XMLSTATE_DOCUMENT;
+                is_space = prepare_text(ctx);
                 if( ctx->buf_len)
-                    return XML_TOK_TEXT;
+                    return is_space ? XML_TOK_SPACE : XML_TOK_TEXT;
                 else
                     continue;
             }
@@ -531,6 +574,7 @@ static xml_tok_t lex_next( read_ctx_t *ctx)
             if( c == _SC('?')) {
                 if( ((c = read_char(ctx)) != SQ_EOF) && (c == _SC('>')) ) {
                     ctx->state = ctx->saved_state;
+                    normalize_EOL(ctx);
                     return XML_TOK_TEXT;    // return XML_TOK_PI_BODY;
                 }
                 else if( c != SQ_EOF) {
@@ -561,7 +605,7 @@ static xml_tok_t lex_next( read_ctx_t *ctx)
                 buf_append(ctx,c);
                 ctx->level--;
                 if( !ctx->level) {
-                    ctx->state = XMLSTATE_PROLOG;
+                    ctx->state = XMLSTATE_DOCUMENT;   // XMLSTATE_PROLOG;
                     return XML_TOK_DOCTYPE;
                 }
                 continue;
@@ -600,9 +644,10 @@ SQRESULT sqt_xmllex_load_cb(HSQUIRRELVM v, const SQChar *opts, SQREADFUNC readfc
 
     ctx.quote = 0;
     ctx.level = 0;
+    ctx.preserve_spaces = SQFalse;
 
-    ctx.state = XMLSTATE_PROLOG;
-    ctx.saved_state = XMLSTATE_PROLOG;
+    ctx.state = XMLSTATE_DOCUMENT;    // XMLSTATE_PROLOG;
+    ctx.saved_state = XMLSTATE_DOCUMENT;    // XMLSTATE_PROLOG;
     
     ctx.error = XMLERR_NONE;
 
@@ -624,37 +669,155 @@ SQRESULT sqt_xmllex_load(HSQUIRRELVM v, const SQChar *opts, SQFILE file)
     return sqt_xmllex_load_cb(v, opts, sqstd_FILEREADFUNC, file);
 }
 
-static SQRESULT _g_xmllex_xmllex(HSQUIRRELVM v)
+extern const SQRegClass _sqt_xmllex_decl;
+#define SQT_XMLLEX_TYPE_TAG ((SQUserPointer)(SQHash)&_sqt_xmllex_decl)
+
+static HSQMEMBERHANDLE xmllex__stream_handle;
+static HSQMEMBERHANDLE xmllex_token_handle;
+static HSQMEMBERHANDLE xmllex_text_handle;
+
+#define SETUP_XMLLEX(v) \
+    read_ctx_t *ctx = NULL; \
+    if(SQ_FAILED(sq_getinstanceup(v,1,(SQUserPointer*)&ctx,(SQUserPointer)SQT_XMLLEX_TYPE_TAG))) \
+        return sq_throwerror(v,_SC("invalid type tag"));
+
+static SQInteger __xmllex_releasehook(SQUserPointer p, SQInteger size)
 {
-                                        // this stream opts...
+    sq_free( p, size);
+    return 1;
+}
+
+static SQInteger _xmllex__typeof(HSQUIRRELVM v)
+{
+    sq_pushstring(v,_sqt_xmllex_decl.name,-1);
+    return 1;
+}
+
+static SQInteger _xmllex_constructor(HSQUIRRELVM v)
+{
 	SQFILE file;
     const SQChar *opts = _SC("");
+    read_ctx_t *ctx;
 
     if( SQ_FAILED( sq_getinstanceup( v,2,(SQUserPointer*)&file,(SQUserPointer)SQSTD_STREAM_TYPE_TAG))) {
         return sq_throwerror(v,ERR_MSG_ARG_NO_STREAM);
 	}
-
+    
     if( sq_gettop(v) > 2)
     {
         sq_getstring(v,3,&opts);
     }
+    
+    ctx = sq_malloc( sizeof(read_ctx_t));
+    if( ctx) {
+        ctx->v = v;
+        ctx->readfct = sqstd_FILEREADFUNC;
+        ctx->user = file;
 
-	if(SQ_SUCCEEDED(sqt_xmllex_load(v, opts, file))) {
-                                        // this stream opts... data
-		return 0;
+        ctx->back_char = 0;
+
+        ctx->buf_len = 0;
+        ctx->buf_alloc = 0;
+        ctx->buf = 0;
+
+        ctx->quote = 0;
+        ctx->level = 0;
+        ctx->preserve_spaces = SQFalse;
+
+        ctx->state = XMLSTATE_DOCUMENT; // XMLSTATE_PROLOG;
+        ctx->saved_state = XMLSTATE_DOCUMENT;   // XMLSTATE_PROLOG;
+    
+        ctx->error = XMLERR_NONE;
+    
+        if(SQ_FAILED(sq_setinstanceup(v,1,ctx))) {
+            sq_free( ctx, sizeof(read_ctx_t));
+            return sq_throwerror(v, _SC("cannot create xmllex instance"));
+        }
+        
+		sq_setreleasehook(v,1,__xmllex_releasehook);
+
+        // save stream in _stream member
+        sq_push(v,2);
+        sq_setbyhandle(v,1,&xmllex__stream_handle);
+
+        sq_pushinteger(v,-1);
+        sq_setbyhandle(v,1,&xmllex_token_handle);
+    
+        return 0;
     }
-    return SQ_ERROR; //propagates the error
+	return sq_throwerror(v, _SC("cannot create xmllex"));
 }
 
-#define _DECL_GLOBALXMLLEX_FUNC(name,nparams,typecheck) {_SC(#name),_g_xmllex_##name,nparams,typecheck}
-static const SQRegFunction _xmllex_funcs[]={
-    _DECL_GLOBALXMLLEX_FUNC(xmllex,-2,_SC(".xs")),
-//    _DECL_GLOBALXMLLEX_FUNC(savejson,-3,_SC(".x.s")),
+static SQRESULT _xmllex_next(HSQUIRRELVM v)
+{
+    xml_tok_t tok;
+    SETUP_XMLLEX(v);
+    
+    ctx->v = v;
+    ctx->buf_len = 0;
+    ctx->buf_alloc = 0;
+    ctx->buf = 0;
+    
+    tok = lex_next(ctx);
+    if( tok == XML_TOK_ERROR) {
+        return sq_throwerror(v, xmlerr_text[ctx->error]);
+    }
+
+    if( ctx->buf_len) {
+        sq_pushstring(v, ctx->buf, ctx->buf_len);
+    }
+    else {
+        sq_pushstring(v, _SC(""), 0);
+    }
+    sq_setbyhandle(v,1,&xmllex_text_handle);
+    
+    sq_pushinteger(v, (SQInteger)tok);
+    sq_push(v,-1);
+    sq_setbyhandle(v,1,&xmllex_token_handle);
+    
+    return 1;
+}
+
+static SQRESULT _xmllex_preservespaces(HSQUIRRELVM v)
+{
+    SQBool val;
+    SETUP_XMLLEX(v);
+    sq_getbool(v,2,&val);
+    ctx->preserve_spaces = val;
+    return 0;
+}
+
+#define _DECL_XMLLEX_FUNC(name,nparams,typecheck) {_SC(#name),_xmllex_##name,nparams,typecheck}
+static const SQRegFunction _xmllex_methods[]={
+    _DECL_XMLLEX_FUNC(constructor,-2,_SC("xxs")),
+    _DECL_XMLLEX_FUNC(_typeof,1,_SC("x")),
+    _DECL_XMLLEX_FUNC(next,1,_SC(".")),
+    _DECL_XMLLEX_FUNC(preservespaces,2,_SC(".b")),
     {NULL,(SQFUNCTION)0,0,NULL}
+};
+
+static const SQRegMember _xmllex_members[] = {
+	{_SC("text"), &xmllex_text_handle },
+	{_SC("token"), &xmllex_token_handle },
+	{_SC("_stream"), &xmllex__stream_handle },
+	{NULL,NULL}
+};
+
+const SQRegClass _sqt_xmllex_decl = {
+	NULL,               // base_class
+    _SC("sqt_xmllex"),  // reg_name
+    _SC("xmllex"),		// name
+	_xmllex_members,	// members
+	_xmllex_methods,	// methods
+	NULL,				// globals
 };
 
 SQRESULT sqstd_register_xmllex(HSQUIRRELVM v)
 {
-	return sqstd_registerfunctions(v, _xmllex_funcs);
+	if(SQ_FAILED(sqstd_registerclass(v,&_sqt_xmllex_decl))) {
+		return SQ_ERROR;
+	}
+ 	sq_poptop(v);
+	return SQ_OK;
 }
 
