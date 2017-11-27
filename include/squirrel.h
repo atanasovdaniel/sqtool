@@ -69,7 +69,7 @@ struct SQOuter;
 #include "sqconfig.h"
 
 #define SQUIRREL_VERSION    _SC("Squirrel 3.1 stable")
-#define SQUIRREL_COPYRIGHT  _SC("Copyright (C) 2003-2016 Alberto Demichelis")
+#define SQUIRREL_COPYRIGHT  _SC("Copyright (C) 2003-2017 Alberto Demichelis")
 #define SQUIRREL_AUTHOR     _SC("Alberto Demichelis")
 #define SQUIRREL_VERSION_NUMBER 310
 
@@ -335,6 +335,7 @@ SQUIRREL_API SQRESULT sq_throwerror(HSQUIRRELVM v,const SQChar *err);
 SQUIRREL_API SQRESULT sq_throwobject(HSQUIRRELVM v);
 SQUIRREL_API void sq_reseterror(HSQUIRRELVM v);
 SQUIRREL_API void sq_getlasterror(HSQUIRRELVM v);
+SQUIRREL_API SQRESULT sq_tailcall(HSQUIRRELVM v, SQInteger nparams);
 
 /*raw object handling*/
 SQUIRREL_API SQRESULT sq_getstackobj(HSQUIRRELVM v,SQInteger idx,HSQOBJECT *po);
