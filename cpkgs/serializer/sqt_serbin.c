@@ -6,7 +6,7 @@
 #include <sqtool.h>
 #include <sqstdio.h>
 #include <sqstdblob.h>
-#include <sqt_serializer.h>
+#include <sqt_serbin.h>
 
 #define MAGIC_NORMAL    0x01534244L
 #define MAGIC_SWAP      0x44425301L
@@ -56,7 +56,7 @@ static const SQChar ERR_MSG_ARG_NO_STREAM[] = _SC("argument is not a stream");
 #define DEF_BSWAP( _T) \
 _T bswap_##_T( _T val) { \
     _T retVal; \
-    int i; \
+    unsigned int i; \
     char *pVal = (char*)&val; \
     char *pRetVal = (char*)&retVal; \
     for( i=0; i<sizeof(_T); i++) { \
@@ -315,29 +315,29 @@ static SQRESULT write_signed( const write_ctx_t *ctx, SQInteger val)
 	SQInteger len;
 	int8_t b[1+sizeof(SQInteger)];
 	if( (val >= INT8_MIN) && (val <= INT8_MAX)) {
-		b[0] = 0xE0 | 0;
+		b[0] = (uint8_t)(0xE0 | 0);
 		b[1] = (int8_t)val;
 		len = 2;
 	}
 	else if( (val >= INT16_MIN) && (val <= INT16_MAX)) {
-		b[0] = 0xE0 | 1;
+		b[0] = (uint8_t)(0xE0 | 1);
 		*(int16_t*)(b+1) = (int16_t)val;
 		len = 3;
 	}
 #ifndef _SQ64
 	else {
-		b[0] = 0xE0 | 2;
+		b[0] = (uint8_t)(0xE0 | 2);
 		*(SQInteger*)(b+1) = val;
 		len = 5;
 	}
 #else // _SQ64
 	else if( (val >= INT32_MIN) && (val <= INT32_MAX)) {
-		b[0] = 0xE0 | 2;
+		b[0] = (uint8_t)(0xE0 | 2);
 		*(int32_t*)(b+1) = (int32_t)val;
 		len = 5;
 	}
 	else {
-		b[0] = 0xE0 | 3;
+		b[0] = (uint8_t)(0xE0 | 3);
 		*(SQInteger*)(b+1) = val;
 		len = 9;
 	}
@@ -546,7 +546,7 @@ SQRESULT sqt_serbin_load_cb(HSQUIRRELVM v, const SQChar *opts, SQREADFUNC readfc
 
 SQRESULT sqt_serbin_load(HSQUIRRELVM v, const SQChar *opts, SQFILE file)
 {
-    return sqt_serbin_load_cb(v, opts, sqstd_FILEREADFUNC, file);
+    return sqt_serbin_load_cb(v, opts, sqstd_STREAMREADFUNC, file);
 }
 
 static SQRESULT _g_serbin_loadbinary(HSQUIRRELVM v)
@@ -592,7 +592,7 @@ SQRESULT sqt_serbin_save_cb( HSQUIRRELVM v, const SQChar *opts, SQWRITEFUNC writ
 
 SQRESULT sqt_serbin_save( HSQUIRRELVM v, const SQChar *opts, SQFILE file)
 {
-    return sqt_serbin_save_cb(v, opts, sqstd_FILEWRITEFUNC, file);
+    return sqt_serbin_save_cb(v, opts, sqstd_STREAMWRITEFUNC, file);
 }
 
 static SQRESULT _g_serbin_savebinary(HSQUIRRELVM v)

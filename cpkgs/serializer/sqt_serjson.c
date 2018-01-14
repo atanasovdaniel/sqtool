@@ -7,9 +7,10 @@
 
 #include <squirrel.h>
 #include <sqstdaux.h>
-#include <sqtool.h>
+#include <sqstdpackage.h>
+#include <sqstdstream.h>
 #include <sqstdio.h>
-#include <sqt_serializer.h>
+#include <sqt_serjson.h>
 
 #define STR_STEP    128
 
@@ -492,7 +493,7 @@ static SQRESULT sqt_serjson_read( read_ctx_t *ctx)
                 else if( c == _SC('u')) {
                     // unicode
                     SQChar hex[4];
-                    int i;
+                    unsigned int i;
                     SQUnsignedInteger code;
                     if( ctx->readfct( ctx->user, &hex, sizeof(hex)) != sizeof(hex)) {
                         return sq_throwerror(ctx->v,ERR_MSG_EOF_STRING);
@@ -669,10 +670,10 @@ SQRESULT sqt_serjson_load_cb(HSQUIRRELVM v, const SQChar *opts, SQREADFUNC readf
 
 SQRESULT sqt_serjson_load(HSQUIRRELVM v, const SQChar *opts, SQFILE file)
 {
-    return sqt_serjson_load_cb(v, opts, sqstd_FILEREADFUNC, file);
+    return sqt_serjson_load_cb(v, opts, sqstd_STREAMREADFUNC, file);
 }
 
-static SQRESULT _g_serjson_loadjson(HSQUIRRELVM v)
+static SQRESULT _g_serjson_load(HSQUIRRELVM v)
 {
                                         // this stream opts...
 	SQFILE file;
@@ -755,10 +756,10 @@ SQRESULT sqt_serjson_save_cb( HSQUIRRELVM v, const SQChar *opts, SQWRITEFUNC wri
 
 SQRESULT sqt_serjson_save( HSQUIRRELVM v, const SQChar *opts, SQFILE file)
 {
-    return sqt_serjson_save_cb(v, opts, sqstd_FILEWRITEFUNC, file);
+    return sqt_serjson_save_cb(v, opts, sqstd_STREAMWRITEFUNC, file);
 }
 
-static SQRESULT _g_serjson_savejson(HSQUIRRELVM v)
+static SQRESULT _g_serjson_save(HSQUIRRELVM v)
 {
                                 // this stream data opts...
 	SQFILE file;
@@ -783,13 +784,24 @@ static SQRESULT _g_serjson_savejson(HSQUIRRELVM v)
 
 #define _DECL_GLOBALSERJSON_FUNC(name,nparams,typecheck) {_SC(#name),_g_serjson_##name,nparams,typecheck}
 static const SQRegFunction _serjson_funcs[]={
-    _DECL_GLOBALSERJSON_FUNC(loadjson,-2,_SC(".xs")),
-    _DECL_GLOBALSERJSON_FUNC(savejson,-3,_SC(".x.s")),
+    _DECL_GLOBALSERJSON_FUNC(load,-2,_SC(".xs")),
+    _DECL_GLOBALSERJSON_FUNC(save,-3,_SC(".x.s")),
     {NULL,(SQFUNCTION)0,0,NULL}
 };
 
-SQRESULT sqstd_register_serjson(HSQUIRRELVM v)
+SQUIRREL_API SQInteger sqload_json(HSQUIRRELVM v);
+SQInteger sqload_json(HSQUIRRELVM v)
 {
-	return sqstd_registerfunctions(v, _serjson_funcs);
+    sq_newtable(v);
+    sqstd_registerfunctions(v, _serjson_funcs);
+    return 1;
 }
 
+SQRESULT sqstd_register_serjson(HSQUIRRELVM v)
+{
+    if(SQ_SUCCEEDED(sqstd_package_registerfct(v,_SC("serializer.json"),sqload_json))) {
+        sq_poptop(v);
+        return SQ_OK;
+    }
+    return SQ_ERROR;
+}
