@@ -70,6 +70,9 @@ $(eval $(call MAKE_LIBRARY,libsqtool.a))
 #######
 # Extension libraryes
 
+C_SOURCE_FILES+=./sqtlib/sqt_basictypes.c
+$(eval $(call MAKE_LIBRARY,libbasictypes.a))
+
 C_SOURCE_FILES+=./sqtlib/sqt_serbin.c
 C_SOURCE_FILES+=./sqtlib/sqt_serjson.c
 $(eval $(call MAKE_LIBRARY,libser.a))

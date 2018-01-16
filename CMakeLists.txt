@@ -42,7 +42,7 @@ function(define_package_so pkg_name)
         install(TARGETS ${package_target} LIBRARY DESTINATION ${INSTALL_LIB_DIR}/cpkgs/${cpkg_path_root})
     endif()
     
-endfunction(define_package)
+endfunction(define_package_so)
 
 set(CMAKE_INSTALL_PREFIX "${CMAKE_SOURCE_DIR}" CACHE PATH "")
 set(CMAKE_BUILD_TYPE "Release" CACHE STRING "")
@@ -107,4 +107,6 @@ set(CPKGS_ROOT_DIR ${CMAKE_SOURCE_DIR}/cpkgs)
 MESSAGE( STATUS "CPKGS_ROOT_DIR:    " ${CPKGS_ROOT_DIR} )
 
 add_subdirectory(cpkgs/serializer)
+
+add_subdirectory(cpkgs/basictypes)
 

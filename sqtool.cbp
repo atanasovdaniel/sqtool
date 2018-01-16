@@ -12,7 +12,7 @@
 				<Option object_output="build_dbg/obj/" />
 				<Option type="1" />
 				<Option compiler="gcc" />
-				<Option parameters="./test/test_sqio.nut" />
+				<Option parameters="./test/test_basetypes.nut" />
 				<Compiler>
 					<Add option="-g" />
 				</Compiler>
@@ -81,6 +81,7 @@
 		<Unit filename="fs/stat_win_impl.h" />
 		<Unit filename="include/sqstdblob.h" />
 		<Unit filename="include/sqstdio.h" />
+		<Unit filename="include/sqt_basictypes.h" />
 		<Unit filename="include/sqtool.h" />
 		<Unit filename="include/sqtstreamreader.h" />
 		<Unit filename="include/squirrel.h" />
@@ -92,6 +93,9 @@
 		<Unit filename="sqtlib/sqstdio.cpp" />
 		<Unit filename="sqtlib/sqstdstream.cpp" />
 		<Unit filename="sqtlib/sqstdsystem.cpp" />
+		<Unit filename="sqtlib/sqt_basictypes.c">
+			<Option compilerVar="CC" />
+		</Unit>
 		<Unit filename="sqtlib/sqt_decl.c">
 			<Option compilerVar="CC" />
 		</Unit>
