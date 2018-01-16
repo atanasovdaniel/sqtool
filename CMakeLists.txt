@@ -110,3 +110,4 @@ add_subdirectory(cpkgs/serializer)
 
 add_subdirectory(cpkgs/basictypes)
 
+add_subdirectory(cpkgs/xml)

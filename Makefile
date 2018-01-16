@@ -75,6 +75,7 @@ $(eval $(call MAKE_LIBRARY,libbasictypes.a))
 
 C_SOURCE_FILES+=./sqtlib/sqt_serbin.c
 C_SOURCE_FILES+=./sqtlib/sqt_serjson.c
+C_SOURCE_FILES+=./sqtlib/sqt_xml.c
 $(eval $(call MAKE_LIBRARY,libser.a))
 
 $(eval $(call SOURCE_FOLDER,./fs))

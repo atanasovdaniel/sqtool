@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html
+  PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<qaz aa="AA" bb='BB'>
+    <wsx>txt</wsx>
+    <edc>test&amp;text</edc>
+    <edc>test&#68;text</edc>
+    <edc>test&#x44;text</edc>
+    <?pi-hello world?>
+    <Здравей>test&#x44;text</Здравей>
+    <![CDATA[<<<Hellou>>>]]>
+    <!--comment-->
+    <A>
+        <B>
+            <C/>
+        </B>
+        <B>
+            <D/>
+        </B>
+    </A>
+    <!---->
+    <rfv/>
+    wsx
+    <tgb aa="AA&#68;BB" bb="AA&amp;BB"/>
+</qaz>
