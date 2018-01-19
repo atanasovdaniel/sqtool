@@ -38,6 +38,11 @@ function(define_package_so pkg_name)
 
     target_link_libraries(${package_target} package_host_so)
     
+    target_compile_definitions(${package_target} PRIVATE
+        SQPACKAGE_VNAME="${cpkg_full_name}"
+        SQPACKAGE_LOADFCT=load_${package_target}
+    )
+    
     if(NOT DEFINED SQ_DISABLE_INSTALLER)
         install(TARGETS ${package_target} LIBRARY DESTINATION ${INSTALL_LIB_DIR}/cpkgs/${cpkg_path_root})
     endif()

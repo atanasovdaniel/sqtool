@@ -26,8 +26,8 @@ THE SOFTWARE.
 
 #include <squirrel.h>
 #include <sqstdaux.h>
-#include <sqtool.h>
-#include <sqstdio.h>
+#include <sqstdpackage.h>
+#include <sqstdstream.h>
 
 
 /*
@@ -649,7 +649,7 @@ static xml_tok_t lex_next( read_ctx_t *ctx)
     }
 }
 
-SQRESULT sqt_xmllex_load_cb(HSQUIRRELVM v, const SQChar *opts, SQREADFUNC readfct, SQUserPointer user)
+SQRESULT sqt_xmllex_load_cb(HSQUIRRELVM v, SQ_UNUSED_ARG(const SQChar *opts), SQREADFUNC readfct, SQUserPointer user)
 {
     read_ctx_t ctx;
     xml_tok_t tok;
@@ -686,9 +686,9 @@ SQRESULT sqt_xmllex_load_cb(HSQUIRRELVM v, const SQChar *opts, SQREADFUNC readfc
 	return 0;
 }
 
-SQRESULT sqt_xmllex_load(HSQUIRRELVM v, const SQChar *opts, SQFILE file)
+SQRESULT sqt_xmllex_load(HSQUIRRELVM v, const SQChar *opts, SQSTREAM stream)
 {
-    return sqt_xmllex_load_cb(v, opts, sqstd_STREAMREADFUNC, file);
+    return sqt_xmllex_load_cb(v, opts, sqstd_STREAMREADFUNC, stream);
 }
 
 extern const SQRegClass _sqt_xmllex_decl;
@@ -717,11 +717,11 @@ static SQInteger _xmllex__typeof(HSQUIRRELVM v)
 
 static SQInteger _xmllex_constructor(HSQUIRRELVM v)
 {
-	SQFILE file;
+	SQSTREAM stream;
     const SQChar *opts = _SC("");
     read_ctx_t *ctx;
 
-    if( SQ_FAILED( sq_getinstanceup( v,2,(SQUserPointer*)&file,(SQUserPointer)SQSTD_STREAM_TYPE_TAG))) {
+    if( SQ_FAILED( sq_getinstanceup( v,2,(SQUserPointer*)&stream,(SQUserPointer)SQSTD_STREAM_TYPE_TAG))) {
         return sq_throwerror(v,ERR_MSG_ARG_NO_STREAM);
 	}
     
@@ -734,7 +734,7 @@ static SQInteger _xmllex_constructor(HSQUIRRELVM v)
     if( ctx) {
         ctx->v = v;
         ctx->readfct = sqstd_STREAMREADFUNC;
-        ctx->user = file;
+        ctx->user = stream;
 
         ctx->back_char = 0;
 
@@ -827,18 +827,27 @@ static const SQRegMember _xmllex_members[] = {
 
 const SQRegClass _sqt_xmllex_decl = {
 	NULL,               // base_class
-    _SC("sqt_xmllex"),  // reg_name
-    _SC("xmllex"),		// name
+    _SC("sqt_xml_lexer"),  // reg_name
+    _SC("lexer"),		// name
 	_xmllex_members,	// members
 	_xmllex_methods,	// methods
 };
 
-SQRESULT sqstd_register_xmllex(HSQUIRRELVM v)
+SQUIRREL_API SQInteger SQPACKAGE_LOADFCT(HSQUIRRELVM v);
+SQInteger SQPACKAGE_LOADFCT(HSQUIRRELVM v)
 {
 	if(SQ_FAILED(sqstd_registerclass(v,&_sqt_xmllex_decl))) {
 		return SQ_ERROR;
 	}
- 	sq_poptop(v);
-	return SQ_OK;
+    return 1;
+}
+
+SQRESULT sqstd_register_xml_lexer(HSQUIRRELVM v)
+{
+    if(SQ_SUCCEEDED(sqstd_package_registerfct(v,_SC("xml.lexer"),SQPACKAGE_LOADFCT))) {
+        sq_poptop(v);
+        return SQ_OK;
+    }
+    return SQ_ERROR;
 }
 

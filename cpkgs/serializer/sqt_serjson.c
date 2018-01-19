@@ -31,7 +31,6 @@ THE SOFTWARE.
 #include <sqstdaux.h>
 #include <sqstdpackage.h>
 #include <sqstdstream.h>
-#include <sqstdio.h>
 #include <sqt_serjson.h>
 
 #define STR_STEP    128
@@ -678,7 +677,7 @@ static SQRESULT sqt_serjson_read( read_ctx_t *ctx)
 }
 
 
-SQRESULT sqt_serjson_load_cb(HSQUIRRELVM v, const SQChar *opts, SQREADFUNC readfct, SQUserPointer user)
+SQRESULT sqt_serjson_load_cb(HSQUIRRELVM v, SQ_UNUSED_ARG(const SQChar *opts), SQREADFUNC readfct, SQUserPointer user)
 {
     read_ctx_t ctx;
     
@@ -690,18 +689,18 @@ SQRESULT sqt_serjson_load_cb(HSQUIRRELVM v, const SQChar *opts, SQREADFUNC readf
 	return sqt_serjson_read( &ctx);
 }
 
-SQRESULT sqt_serjson_load(HSQUIRRELVM v, const SQChar *opts, SQFILE file)
+SQRESULT sqt_serjson_load(HSQUIRRELVM v, const SQChar *opts, SQSTREAM stream)
 {
-    return sqt_serjson_load_cb(v, opts, sqstd_STREAMREADFUNC, file);
+    return sqt_serjson_load_cb(v, opts, sqstd_STREAMREADFUNC, stream);
 }
 
 static SQRESULT _g_serjson_load(HSQUIRRELVM v)
 {
                                         // this stream opts...
-	SQFILE file;
+	SQSTREAM stream;
     const SQChar *opts = _SC("");
 
-    if( SQ_FAILED( sq_getinstanceup( v,2,(SQUserPointer*)&file,(SQUserPointer)SQSTD_STREAM_TYPE_TAG))) {
+    if( SQ_FAILED( sq_getinstanceup( v,2,(SQUserPointer*)&stream,(SQUserPointer)SQSTD_STREAM_TYPE_TAG))) {
         return sq_throwerror(v,ERR_MSG_ARG_NO_STREAM);
 	}
     
@@ -710,7 +709,7 @@ static SQRESULT _g_serjson_load(HSQUIRRELVM v)
         sq_getstring(v,3,&opts);
     }
     
-	if(SQ_SUCCEEDED(sqt_serjson_load(v, opts, file))) {
+	if(SQ_SUCCEEDED(sqt_serjson_load(v, opts, stream))) {
                                         // this stream opts... data
 		return 1;
     }
@@ -776,18 +775,18 @@ SQRESULT sqt_serjson_save_cb( HSQUIRRELVM v, const SQChar *opts, SQWRITEFUNC wri
     return write_check(&ctx, ctx.str_nl, ctx.str_nl_len);
 }
 
-SQRESULT sqt_serjson_save( HSQUIRRELVM v, const SQChar *opts, SQFILE file)
+SQRESULT sqt_serjson_save( HSQUIRRELVM v, const SQChar *opts, SQSTREAM stream)
 {
-    return sqt_serjson_save_cb(v, opts, sqstd_STREAMWRITEFUNC, file);
+    return sqt_serjson_save_cb(v, opts, sqstd_STREAMWRITEFUNC, stream);
 }
 
 static SQRESULT _g_serjson_save(HSQUIRRELVM v)
 {
                                 // this stream data opts...
-	SQFILE file;
+	SQSTREAM stream;
     const SQChar *opts = _SC("");
 
-    if( SQ_FAILED( sq_getinstanceup( v,2,(SQUserPointer*)&file,(SQUserPointer)SQSTD_STREAM_TYPE_TAG))) {
+    if( SQ_FAILED( sq_getinstanceup( v,2,(SQUserPointer*)&stream,(SQUserPointer)SQSTD_STREAM_TYPE_TAG))) {
         return sq_throwerror(v,ERR_MSG_ARG_NO_STREAM);
 	}
     
@@ -798,7 +797,7 @@ static SQRESULT _g_serjson_save(HSQUIRRELVM v)
         sq_getstring(v,3,&opts);
     }
     
-	if(SQ_SUCCEEDED(sqt_serjson_save(v,opts,file))) {
+	if(SQ_SUCCEEDED(sqt_serjson_save(v,opts,stream))) {
 		return 0;   // no return value
     }
     return SQ_ERROR; //propagates the error
@@ -811,8 +810,8 @@ static const SQRegFunction _serjson_funcs[]={
     {NULL,(SQFUNCTION)0,0,NULL}
 };
 
-SQUIRREL_API SQInteger sqload_json(HSQUIRRELVM v);
-SQInteger sqload_json(HSQUIRRELVM v)
+SQUIRREL_API SQInteger SQPACKAGE_LOADFCT(HSQUIRRELVM v);
+SQInteger SQPACKAGE_LOADFCT(HSQUIRRELVM v)
 {
     sq_newtable(v);
     sqstd_registerfunctions(v, _serjson_funcs);
@@ -821,7 +820,7 @@ SQInteger sqload_json(HSQUIRRELVM v)
 
 SQRESULT sqstd_register_serjson(HSQUIRRELVM v)
 {
-    if(SQ_SUCCEEDED(sqstd_package_registerfct(v,_SC("serializer.json"),sqload_json))) {
+    if(SQ_SUCCEEDED(sqstd_package_registerfct(v,_SC("serializer.json"),SQPACKAGE_LOADFCT))) {
         sq_poptop(v);
         return SQ_OK;
     }

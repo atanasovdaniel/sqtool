@@ -25,8 +25,8 @@ THE SOFTWARE.
 
 #include <squirrel.h>
 #include <sqstdaux.h>
-#include <sqtool.h>
-#include <sqstdio.h>
+#include <sqstdpackage.h>
+#include <sqstdstream.h>
 #include <sqstdblob.h>
 #include <sqt_serbin.h>
 
@@ -539,7 +539,7 @@ SQRESULT sqt_serbin_write( const write_ctx_t *ctx)
 }
 
 
-SQRESULT sqt_serbin_load_cb(HSQUIRRELVM v, const SQChar *opts, SQREADFUNC readfct, SQUserPointer user)
+SQRESULT sqt_serbin_load_cb(HSQUIRRELVM v, SQ_UNUSED_ARG(const SQChar *opts), SQREADFUNC readfct, SQUserPointer user)
 {
     read_ctx_t ctx;
     uint32_t magic;
@@ -566,18 +566,18 @@ SQRESULT sqt_serbin_load_cb(HSQUIRRELVM v, const SQChar *opts, SQREADFUNC readfc
 	return sqt_serbin_read( &ctx);
 }
 
-SQRESULT sqt_serbin_load(HSQUIRRELVM v, const SQChar *opts, SQFILE file)
+SQRESULT sqt_serbin_load(HSQUIRRELVM v, const SQChar *opts, SQSTREAM stream)
 {
-    return sqt_serbin_load_cb(v, opts, sqstd_STREAMREADFUNC, file);
+    return sqt_serbin_load_cb(v, opts, sqstd_STREAMREADFUNC, stream);
 }
 
 static SQRESULT _g_serbin_loadbinary(HSQUIRRELVM v)
 {
                                 // this stream opts...
-	SQFILE file;
+	SQSTREAM stream;
     const SQChar *opts = 0;
     
-    if( SQ_FAILED( sq_getinstanceup( v,2,(SQUserPointer*)&file,(SQUserPointer)SQSTD_STREAM_TYPE_TAG))) {
+    if( SQ_FAILED( sq_getinstanceup( v,2,(SQUserPointer*)&stream,(SQUserPointer)SQSTD_STREAM_TYPE_TAG))) {
         return sq_throwerror(v,ERR_MSG_ARG_NO_STREAM);
 	}
     
@@ -586,7 +586,7 @@ static SQRESULT _g_serbin_loadbinary(HSQUIRRELVM v)
         sq_getstring(v,3,&opts);
     }
 
-	if(SQ_SUCCEEDED(sqt_serbin_load(v, opts, file))) {
+	if(SQ_SUCCEEDED(sqt_serbin_load(v, opts, stream))) {
                                 // this stream opts... data
 		return 1;   // return loaded data
     }
@@ -594,7 +594,7 @@ static SQRESULT _g_serbin_loadbinary(HSQUIRRELVM v)
 }
 
 
-SQRESULT sqt_serbin_save_cb( HSQUIRRELVM v, const SQChar *opts, SQWRITEFUNC writefct, SQUserPointer user)
+SQRESULT sqt_serbin_save_cb( HSQUIRRELVM v, SQ_UNUSED_ARG(const SQChar *opts), SQWRITEFUNC writefct, SQUserPointer user)
 {
     write_ctx_t ctx;
     uint32_t magic;
@@ -612,18 +612,18 @@ SQRESULT sqt_serbin_save_cb( HSQUIRRELVM v, const SQChar *opts, SQWRITEFUNC writ
 	return sqt_serbin_write( &ctx);
 }
 
-SQRESULT sqt_serbin_save( HSQUIRRELVM v, const SQChar *opts, SQFILE file)
+SQRESULT sqt_serbin_save( HSQUIRRELVM v, const SQChar *opts, SQSTREAM stream)
 {
-    return sqt_serbin_save_cb(v, opts, sqstd_STREAMWRITEFUNC, file);
+    return sqt_serbin_save_cb(v, opts, sqstd_STREAMWRITEFUNC, stream);
 }
 
 static SQRESULT _g_serbin_savebinary(HSQUIRRELVM v)
 {
                                 // this stream data opts...
-	SQFILE file;
+	SQSTREAM stream;
     const SQChar *opts = _SC("");
     
-    if( SQ_FAILED( sq_getinstanceup( v,2,(SQUserPointer*)&file,(SQUserPointer)SQSTD_STREAM_TYPE_TAG))) {
+    if( SQ_FAILED( sq_getinstanceup( v,2,(SQUserPointer*)&stream,(SQUserPointer)SQSTD_STREAM_TYPE_TAG))) {
         return sq_throwerror(v,ERR_MSG_ARG_NO_STREAM);
 	}
     
@@ -634,7 +634,7 @@ static SQRESULT _g_serbin_savebinary(HSQUIRRELVM v)
         sq_getstring(v,3,&opts);
     }
     
-	if(SQ_SUCCEEDED(sqt_serbin_save(v, opts, file))) {
+	if(SQ_SUCCEEDED(sqt_serbin_save(v, opts, stream))) {
 		return 0;   // no return value
     }
     return SQ_ERROR; //propagates the error
@@ -647,7 +647,20 @@ static const SQRegFunction _serbin_funcs[]={
     {NULL,(SQFUNCTION)0,0,NULL}
 };
 
+SQUIRREL_API SQInteger SQPACKAGE_LOADFCT(HSQUIRRELVM v);
+SQInteger SQPACKAGE_LOADFCT(HSQUIRRELVM v)
+{
+    sq_newtable(v);
+    sqstd_registerfunctions(v, _serbin_funcs);
+    return 1;
+}
+
 SQRESULT sqstd_register_serbin(HSQUIRRELVM v)
 {
-	return sqstd_registerfunctions(v, _serbin_funcs);
+    if(SQ_SUCCEEDED(sqstd_package_registerfct(v,_SC("serializer.binary"),SQPACKAGE_LOADFCT))) {
+        sq_poptop(v);
+        return SQ_OK;
+    }
+    return SQ_ERROR;
 }
+

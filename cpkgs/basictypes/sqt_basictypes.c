@@ -24,24 +24,24 @@ THE SOFTWARE.
 #include <stddef.h>
 #include <string.h>
 #include <squirrel.h>
-#include <sqtool.h>
+#include <sqstdaux.h>
 #include <sqt_basictypes.h>
 
 //#define SQTSA_IS_FLOAT  0x200
 //#define SQTSA_IS_SIGNED 0x100
 //#define SQTSA_TYPE_MASK (SQTSA_IS_FLOAT | SQTSA_IS_SIGNED)
 
-extern SQUIRREL_API_VAR const SQTClassDecl sqt_basictype_decl;
+extern SQUIRREL_API_VAR const SQRegClass sqt_basictype_decl;
 #define SQT_BASICTYPE_TYPE_TAG ((SQUserPointer)(SQHash)&sqt_basictype_decl)
-extern SQUIRREL_API_VAR const SQTClassDecl sqt_basicvalue_decl;
+extern SQUIRREL_API_VAR const SQRegClass sqt_basicvalue_decl;
 #define SQT_BASICVALUE_TYPE_TAG ((SQUserPointer)(SQHash)&sqt_basicvalue_decl)
-extern SQUIRREL_API_VAR const SQTClassDecl sqt_basicpointer_decl;
+extern SQUIRREL_API_VAR const SQRegClass sqt_basicpointer_decl;
 #define SQT_BASICPOINTER_TYPE_TAG ((SQUserPointer)(SQHash)&sqt_basicpointer_decl)
-extern SQUIRREL_API_VAR const SQTClassDecl sqt_basicarray_decl;
+extern SQUIRREL_API_VAR const SQRegClass sqt_basicarray_decl;
 #define SQT_BASICARRAY_TYPE_TAG ((SQUserPointer)(SQHash)&sqt_basicarray_decl)
-extern SQUIRREL_API_VAR const SQTClassDecl sqt_basicmember_decl;
+extern SQUIRREL_API_VAR const SQRegClass sqt_basicmember_decl;
 #define SQT_BASICMEMBER_TYPE_TAG ((SQUserPointer)(SQHash)&sqt_basicmember_decl)
-extern SQUIRREL_API_VAR const SQTClassDecl sqt_basicstruct_decl;
+extern SQUIRREL_API_VAR const SQRegClass sqt_basicstruct_decl;
 #define SQT_BASICSTRUCT_TYPE_TAG ((SQUserPointer)(SQHash)&sqt_basicstruct_decl)
 
 typedef void (*sqt_basicpush_fct)(const SQTBasicTypeDef *bt, HSQUIRRELVM v, SQUserPointer p);
@@ -98,12 +98,12 @@ const SQTBasicTypeDef *sqt_basictypebyid( SQInteger id)
 }
 
 #define MK_BASE(_type, _sqtype, _push, _get) \
-static void sq_pushbasic_##_type( const SQTBasicTypeDef *bt, HSQUIRRELVM v,const SQUserPointer p) \
+static void sq_pushbasic_##_type( SQ_UNUSED_ARG(const SQTBasicTypeDef *bt), HSQUIRRELVM v,const SQUserPointer p) \
 { \
     _sqtype val = (_sqtype)*(const _type*)p; \
     _push(v,val); \
 } \
-static SQRESULT sq_getbasic_##_type( const SQTBasicTypeDef *bt, HSQUIRRELVM v, SQInteger idx, SQUserPointer p) \
+static SQRESULT sq_getbasic_##_type( SQ_UNUSED_ARG(const SQTBasicTypeDef *bt), HSQUIRRELVM v, SQInteger idx, SQUserPointer p) \
 { \
     _sqtype val; \
     if( SQ_SUCCEEDED(_get(v,idx,&val))) { \
@@ -135,11 +135,11 @@ MK_BASE( float, SQFloat, sq_pushfloat, sq_getfloat)
 MK_BASE( double, SQFloat, sq_pushfloat, sq_getfloat)
 
 // void
-static void sq_pushbasic_void( const SQTBasicTypeDef *bt, HSQUIRRELVM v,const SQUserPointer p)
+static void sq_pushbasic_void( SQ_UNUSED_ARG(const SQTBasicTypeDef *bt), HSQUIRRELVM v,SQ_UNUSED_ARG(const SQUserPointer p))
 {
 	sq_throwerror(v,_SC("can't push C type void"));
 }
-static SQRESULT sq_getbasic_void( const SQTBasicTypeDef *bt, HSQUIRRELVM v, SQInteger idx, SQUserPointer p)
+static SQRESULT sq_getbasic_void( SQ_UNUSED_ARG(const SQTBasicTypeDef *bt), HSQUIRRELVM v, SQ_UNUSED_ARG(SQInteger idx), SQ_UNUSED_ARG(SQUserPointer p))
 {
 	return sq_throwerror(v,_SC("can't get C type void"));
 }
@@ -327,13 +327,12 @@ static const SQRegFunction _type_methods[] = {
     {NULL,(SQFUNCTION)0,0,NULL}
 };
 
-const SQTClassDecl sqt_basictype_decl = {
+const SQRegClass sqt_basictype_decl = {
 	NULL,                   // base_class
     _SC("sqt_basictype"),	// reg_name
     _SC("basictype"),		// name
 	NULL,                   // members
 	_type_methods,          // methods
-	NULL,                   // globals
 };
 
 /* ------------------------------------
@@ -354,12 +353,12 @@ SQRESULT sqt_getbasicpointer(HSQUIRRELVM v, SQInteger idx, SQTBasicPointerTypeDe
 
 static HSQMEMBERHANDLE _pointer_type_oftype;
 
-static void sq_pushbasic_pointer( const SQTBasicTypeDef *bt, HSQUIRRELVM v,const SQUserPointer p)
+static void sq_pushbasic_pointer( SQ_UNUSED_ARG(const SQTBasicTypeDef *bt), HSQUIRRELVM v,const SQUserPointer p)
 {
     SQUserPointer val = (SQUserPointer)*(const void**)p;
 	sq_pushuserpointer(v,val);
 }
-static SQRESULT sq_getbasic_pointer( const SQTBasicTypeDef *bt, HSQUIRRELVM v, SQInteger idx, SQUserPointer p)
+static SQRESULT sq_getbasic_pointer( SQ_UNUSED_ARG(const SQTBasicTypeDef *bt), HSQUIRRELVM v, SQInteger idx, SQUserPointer p)
 {
     SQUserPointer val;
     SQUserPointer basicvalue;
@@ -461,7 +460,7 @@ static SQInteger _pointer_refmember(HSQUIRRELVM v)
     return 1;
 }
 
-static const SQTMemberDecl _pointer_members[] = {
+static const SQRegMember _pointer_members[] = {
 	{_SC("$oftype"), &_pointer_type_oftype },
 	{NULL,NULL}
 };
@@ -475,13 +474,12 @@ static const SQRegFunction _pointer_methods[] = {
     {NULL,(SQFUNCTION)0,0,NULL}
 };
 
-const SQTClassDecl sqt_basicpointer_decl = {
+const SQRegClass sqt_basicpointer_decl = {
 	&sqt_basictype_decl,		// base_class
     _SC("sqt_basicpointer"),	// reg_name
     _SC("basicpointer"),		// name
 	_pointer_members,         // members
 	_pointer_methods,         // methods
-	NULL,                   // globals
 };
 
 /* ------------------------------------
@@ -635,7 +633,7 @@ static SQInteger _array_refmember(HSQUIRRELVM v)
     return 1;
 }
 
-static const SQTMemberDecl _array_members[] = {
+static const SQRegMember _array_members[] = {
 	{_SC("$oftype"), &_array_type_oftype },
 	{NULL,NULL}
 };
@@ -650,13 +648,12 @@ static const SQRegFunction _array_methods[] = {
     {NULL,(SQFUNCTION)0,0,NULL}
 };
 
-const SQTClassDecl sqt_basicarray_decl = {
+const SQRegClass sqt_basicarray_decl = {
 	&sqt_basictype_decl,		// base_class
     _SC("sqt_basicarray"),	// reg_name
     _SC("basicarray"),		// name
 	_array_members,         // members
 	_array_methods,         // methods
-	NULL,                   // globals
 };
 
 /* ------------------------------------
@@ -735,7 +732,7 @@ static SQInteger _member_offset(HSQUIRRELVM v)
     return 1;
 }
 
-static const SQTMemberDecl _member_members[] = {
+static const SQRegMember _member_members[] = {
 	{_SC("$name"), &_member_name_handle },
 	{_SC("$type"), &_member_type_handle },
 	{NULL,NULL}
@@ -751,13 +748,12 @@ static const SQRegFunction _member_methods[] = {
     {NULL,(SQFUNCTION)0,0,NULL}
 };
 
-const SQTClassDecl sqt_basicmember_decl = {
+const SQRegClass sqt_basicmember_decl = {
 	NULL,				// base_class
     _SC("sqt_basicmember"),	// reg_name
     _SC("basicmember"),		// name
 	_member_members,        // members
 	_member_methods,        // methods
-	NULL,               // globals
 };
 
 /* ------------------------------------
@@ -970,7 +966,7 @@ static SQInteger _struct_name(HSQUIRRELVM v)
     return 1;
 }
 
-static const SQTMemberDecl _struct_members[] = {
+static const SQRegMember _struct_members[] = {
 	{_SC("$members"), &_struct_members_handle },
 	{_SC("$name"), &_struct_name_handle },
 	{NULL,NULL}
@@ -987,13 +983,12 @@ static const SQRegFunction _struct_methods[] = {
     {NULL,(SQFUNCTION)0,0,NULL}
 };
 
-const SQTClassDecl sqt_basicstruct_decl = {
+const SQRegClass sqt_basicstruct_decl = {
 	&sqt_basictype_decl,    // base_class
     _SC("sqt_basicstruct"),	// reg_name
     _SC("basicstruct"),		// name
 	_struct_members,        // members
 	_struct_methods,        // methods
-	NULL,               // globals
 };
 
 // /* ------------------------------------
@@ -1272,7 +1267,7 @@ static SQInteger _value_address(HSQUIRRELVM v)
     return 1;
 }
 
-static const SQTMemberDecl _value_members[] = {
+static const SQRegMember _value_members[] = {
 	{_SC("$type"), &_value_type_handle },
 	{_SC("$ptr"), &_value_ptr_handle },
 	{_SC("$offset"), &_value_offset_handle },
@@ -1294,13 +1289,12 @@ static const SQRegFunction _value_methods[] = {
     {NULL,(SQFUNCTION)0,0,NULL}
 };
 
-const SQTClassDecl sqt_basicvalue_decl = {
+const SQRegClass sqt_basicvalue_decl = {
 	NULL,				// base_class
     _SC("sqt_basicvalue"),	// reg_name
     _SC("basicvalue"),		// name
 	_value_members,        // members
 	_value_methods,        // methods
-	NULL,               // globals
 };
 
 /* ------------------------------------
@@ -1326,7 +1320,7 @@ SQUIRREL_API SQRESULT sqstd_register_basictypes(HSQUIRRELVM v)
     sq_pushstring(v,_SC("ctypes"),-1);
     sq_newtable(v);
 
-	if(SQ_FAILED(sqt_declareclass(v,&sqt_basictype_decl))) {
+	if(SQ_FAILED(sqstd_registerclass(v,&sqt_basictype_decl))) {
 		return SQ_ERROR;
 	}
 
@@ -1356,27 +1350,27 @@ SQUIRREL_API SQRESULT sqstd_register_basictypes(HSQUIRRELVM v)
 
  	sq_poptop(v);
 
-	if(SQ_FAILED(sqt_declareclass(v,&sqt_basicpointer_decl))) {
+	if(SQ_FAILED(sqstd_registerclass(v,&sqt_basicpointer_decl))) {
 		return SQ_ERROR;
 	}
  	sq_poptop(v);
     
-	if(SQ_FAILED(sqt_declareclass(v,&sqt_basicarray_decl))) {
+	if(SQ_FAILED(sqstd_registerclass(v,&sqt_basicarray_decl))) {
 		return SQ_ERROR;
 	}
  	sq_poptop(v);
     
-	if(SQ_FAILED(sqt_declareclass(v,&sqt_basicmember_decl))) {
+	if(SQ_FAILED(sqstd_registerclass(v,&sqt_basicmember_decl))) {
 		return SQ_ERROR;
 	}
  	sq_poptop(v);
 
-	if(SQ_FAILED(sqt_declareclass(v,&sqt_basicstruct_decl))) {
+	if(SQ_FAILED(sqstd_registerclass(v,&sqt_basicstruct_decl))) {
 		return SQ_ERROR;
 	}
  	sq_poptop(v);
 
-	if(SQ_FAILED(sqt_declareclass(v,&sqt_basicvalue_decl))) {
+	if(SQ_FAILED(sqstd_registerclass(v,&sqt_basicvalue_decl))) {
 		return SQ_ERROR;
 	}
  	sq_poptop(v);
@@ -1384,4 +1378,12 @@ SQUIRREL_API SQRESULT sqstd_register_basictypes(HSQUIRRELVM v)
     sq_newslot(v,-3,SQFalse);
 
 	return SQ_OK;
+}
+
+SQUIRREL_API SQInteger SQPACKAGE_LOADFCT(HSQUIRRELVM v);
+SQInteger SQPACKAGE_LOADFCT(HSQUIRRELVM v)
+{
+    sq_newtable(v);
+    sqstd_register_basictypes(v);
+    return 1;
 }
