@@ -14,7 +14,10 @@
 # #     endif()
 # endif()
 
-define_package_so( json SOURCES sqt_serjson.c)
+add_sqmetapkg_lib( serializer)
 
-define_package_so( binary SOURCES sqt_serbin.c)
+#define_package_so( json SOURCES sqt_serjson.c)
+add_sqpackage_lib( serializer.json SOURCES sqt_serjson.c)
 
+#define_package_so( binary SOURCES sqt_serbin.c)
+add_sqpackage_lib( serializer.binary SOURCES sqt_serbin.c)

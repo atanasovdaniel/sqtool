@@ -4,53 +4,10 @@ else()
   cmake_minimum_required(VERSION 2.8)
 endif()
 
-include(CMakeParseArguments)
-
-function(define_package_so pkg_name)
-    cmake_parse_arguments(
-        arg # prefix of output variables
-        "" # list of names of the boolean arguments (only defined ones will be true)
-        "" # list of names of mono-valued arguments
-        "SOURCES" # list of names of multi-valued arguments (output variables are lists)
-        ${ARGN} # arguments of the function to parse, here we take the all original ones
-    )
-#MESSAGE( STATUS "CMAKE_CURRENT_SOURCE_DIR:  " ${CMAKE_CURRENT_SOURCE_DIR} )
-    string(LENGTH ${CPKGS_ROOT_DIR}/ cpkg_root_len)
-#MESSAGE( STATUS "cpkg_root_len:    " ${cpkg_root_len} )
-    string(SUBSTRING ${CMAKE_CURRENT_SOURCE_DIR} ${cpkg_root_len} -1 cpkg_path_root)
-#MESSAGE( STATUS "cpkg_path_root:    " ${cpkg_path_root} )
-    string(REGEX REPLACE "/" "." cpkg_name_root ${cpkg_path_root})
-#MESSAGE( STATUS "cpkg_name_root:    " ${cpkg_name_root} )
-    string(REGEX REPLACE "/" "_" cpkg_cname_root ${cpkg_path_root})
-#MESSAGE( STATUS "cpkg_cname_root:    " ${cpkg_cname_root} )
-
-    set(cpkg_path ${cpkg_path_root}/${pkg_name})
-    set(cpkg_full_name ${cpkg_name_root}.${pkg_name})
-    
-    set(package_target ${cpkg_cname_root}_${pkg_name})
-    set(package_target ${package_target} PARENT_SCOPE)
-    
-    MESSAGE( STATUS "so package: ${package_target}:  " ${cpkg_full_name})
-
-    add_library(${package_target} MODULE ${arg_SOURCES})
-    set_target_properties(${package_target} PROPERTIES PREFIX "")
-    set_target_properties(${package_target} PROPERTIES OUTPUT_NAME "${pkg_name}")
-
-    target_link_libraries(${package_target} package_host_so)
-    
-    target_compile_definitions(${package_target} PRIVATE
-        SQPACKAGE_VNAME="${cpkg_full_name}"
-        SQPACKAGE_LOADFCT=load_${package_target}
-    )
-    
-    if(NOT DEFINED SQ_DISABLE_INSTALLER)
-        install(TARGETS ${package_target} LIBRARY DESTINATION ${INSTALL_LIB_DIR}/cpkgs/${cpkg_path_root})
-    endif()
-    
-endfunction(define_package_so)
-
 set(CMAKE_INSTALL_PREFIX "${CMAKE_SOURCE_DIR}" CACHE PATH "")
 set(CMAKE_BUILD_TYPE "Release" CACHE STRING "")
+
+include(etc/sqpackage.cmake)
 
 project(sqtool C CXX)
 
@@ -103,16 +60,34 @@ endif()
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
-add_subdirectory(squirrel)
-
 add_library(package_host_so INTERFACE)
 target_link_libraries(package_host_so INTERFACE squirrel_pkg sqstdlib_pkg)
 
-set(CPKGS_ROOT_DIR ${CMAKE_SOURCE_DIR}/cpkgs)
-MESSAGE( STATUS "CPKGS_ROOT_DIR:    " ${CPKGS_ROOT_DIR} )
+add_library(package_host_lib INTERFACE)
+# target_link_libraries(package_host_lib INTERFACE squirrel_ifc sqstdlib_ifc)
+# target_link_libraries(package_host_lib INTERFACE squirrel sqstdlib)
+target_include_directories(package_host_lib
+    INTERFACE
+        $<TARGET_PROPERTY:squirrel,INTERFACE_INCLUDE_DIRECTORIES>
+        $<TARGET_PROPERTY:sqstdlib,INTERFACE_INCLUDE_DIRECTORIES>
+)
+
+install(TARGETS package_host_so package_host_lib EXPORT squirrel)
+
+#add_library(sq_meta_pkg_root INTERFACE)
+#set(sqmetapkg_target sq_meta_pkg_root)
+
+#set(CPKGS_ROOT_DIR ${CMAKE_SOURCE_DIR}/cpkgs)
+#MESSAGE( STATUS "CPKGS_ROOT_DIR:    " ${CPKGS_ROOT_DIR} )
+
+add_sqmetaroot(sq_builtin_packages)
+set(SQ_STDLIB_EXTRA_LIBS sq_builtin_packages)
 
 add_subdirectory(cpkgs/serializer)
 
 add_subdirectory(cpkgs/basictypes)
 
 add_subdirectory(cpkgs/xml)
+
+add_subdirectory(squirrel)
+
