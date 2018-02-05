@@ -4,7 +4,7 @@ else()
   cmake_minimum_required(VERSION 2.8)
 endif()
 
-set(CMAKE_INSTALL_PREFIX "${CMAKE_SOURCE_DIR}" CACHE PATH "")
+set(CMAKE_INSTALL_PREFIX "${CMAKE_SOURCE_DIR}/install" CACHE PATH "")
 set(CMAKE_BUILD_TYPE "Release" CACHE STRING "")
 
 include(etc/sqpackage.cmake)
@@ -83,11 +83,11 @@ install(TARGETS package_host_so package_host_lib EXPORT squirrel)
 add_sqmetaroot(sq_builtin_packages)
 set(SQ_STDLIB_EXTRA_LIBS sq_builtin_packages)
 
-add_subdirectory(cpkgs/serializer)
+add_subdirectory(cpkgs)
 
-add_subdirectory(cpkgs/basictypes)
-
-add_subdirectory(cpkgs/xml)
+get_property(qaz TARGET sq_builtin_packages PROPERTY QAZ)
+MESSAGE( STATUS "sq_builtin_packages: ${qaz}")
+target_link_libraries(sq_builtin_packages PUBLIC ${qaz})
 
 add_subdirectory(squirrel)
 

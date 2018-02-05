@@ -29,6 +29,8 @@ THE SOFTWARE.
 #include <sqstdpackage.h>
 #include <sqstdstream.h>
 
+SQUIRREL_API SQUserPointer _sqt_xml_lexer_type_tag(void);
+#define SQT_XML_LEXER_TYPE_TAG _sqt_xml_lexer_type_tag()
 
 /*
     <TAG ATTR_NAME="ATTR-VALUE"/>
@@ -825,9 +827,14 @@ static const SQRegMember _xmllex_members[] = {
 	{NULL,NULL}
 };
 
+SQUserPointer _sqt_xml_lexer_type_tag(void)
+{
+    return (SQUserPointer)_sqt_xml_lexer_type_tag;
+}
+
 const SQRegClass _sqt_xmllex_decl = {
-	NULL,               // base_class
-    _SC("sqt_xml_lexer"),  // reg_name
+//	NULL,               // base_class
+//    _SC("sqt_xml_lexer"),  // reg_name
     _SC("lexer"),		// name
 	_xmllex_members,	// members
 	_xmllex_methods,	// methods
@@ -836,7 +843,7 @@ const SQRegClass _sqt_xmllex_decl = {
 SQUIRREL_API SQInteger SQPACKAGE_LOADFCT(HSQUIRRELVM v);
 SQInteger SQPACKAGE_LOADFCT(HSQUIRRELVM v)
 {
-	if(SQ_FAILED(sqstd_registerclass(v,&_sqt_xmllex_decl))) {
+	if(SQ_FAILED(sqstd_registerclass(v,SQT_XML_LEXER_TYPE_TAG,&_sqt_xmllex_decl,0))) {
 		return SQ_ERROR;
 	}
     return 1;

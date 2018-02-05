@@ -7,16 +7,18 @@ function(add_sqmetaroot tgt_name)
     set(sqpackage_list_file ${CMAKE_BINARY_DIR}/sq_packages_list.h)
     
     add_library(${tgt_name} STATIC etc/empty_c_file.c)
-    target_link_libraries(${tgt_name} package_host_lib)
+    target_link_libraries(${tgt_name} PUBLIC package_host_lib)
 #    target_include_directories(${tgt_name} INTERFACE ${CMAKE_BINARY_DIR})
-    target_include_directories(${tgt_name} INTERFACE
+    target_include_directories(${tgt_name} PRIVATE
                     $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}>
                     $<INSTALL_INTERFACE:${INSTALL_INC_DIR}>)
     
-    target_compile_definitions(${tgt_name} INTERFACE SQPACKAGE_BUILTIN_LIST=\"sq_packages_list.h\")
+    target_compile_definitions(${tgt_name}
+        INTERFACE SQ_HAVE_BUILTIN_PACKAGES
+        PRIVATE SQ_BUILTIN_PACKAGE_LIST=\"sq_packages_list.h\")
 
     if(NOT DEFINED SQ_DISABLE_INSTALLER)
-        install(TARGETS ${tgt_name} EXPORT squirrel ARCHIVE DESTINATION ${INSTALL_LIB_DIR})
+        #install(TARGETS ${tgt_name} EXPORT squirrel ARCHIVE DESTINATION ${INSTALL_LIB_DIR})
         install(FILES ${sqpackage_list_file} DESTINATION ${INSTALL_INC_DIR})
     endif()
 
@@ -113,16 +115,20 @@ function(add_sqpackage_lib pkg_vname)
     sqpackage_parse_pkg_vname(sqpackagelib)
     MESSAGE( STATUS "sqpackage lib: ${pkg_vname} @ ${sqmetapkg_target}, target:${cpkg_target}")
 
-    add_library(${cpkg_target} OBJECT ${arg_SOURCES})
+    add_library(${cpkg_target} STATIC ${arg_SOURCES})
 
-    target_include_directories(${cpkg_target} PRIVATE $<TARGET_PROPERTY:package_host_lib,INTERFACE_INCLUDE_DIRECTORIES>)
+    ##target_include_directories(${cpkg_target} PRIVATE $<TARGET_PROPERTY:package_host_lib,INTERFACE_INCLUDE_DIRECTORIES>)
+    target_link_libraries(${cpkg_target} PUBLIC package_host_lib)
     
     target_compile_definitions(${cpkg_target} PRIVATE
         SQPACKAGE_VNAME="${pkg_vname}"
         SQPACKAGE_LOADFCT=sqload_${cpkg_cname}
     )
 
-    target_sources(${sqmetapkg_target} PRIVATE $<TARGET_OBJECTS:${cpkg_target}>)
+    #target_sources(${sqmetapkg_target} PRIVATE $<TARGET_OBJECTS:${cpkg_target}>)
+    #target_link_libraries(${sqmetapkg_target} PRIVATE ${cpkg_target})
+    #get_property(prev_props TARGET sq_builtin_packages PROPERTY QAZ)
+    set_property( TARGET ${sqmetapkg_target} APPEND PROPERTY QAZ ${cpkg_target})
 
     if( ${sqmetapkg_target_type} STREQUAL LIB)
         file(APPEND ${sqpackage_list_file}  "SQ_PACKAGE_DEF(${pkg_vname},sqload_${cpkg_cname})\n")

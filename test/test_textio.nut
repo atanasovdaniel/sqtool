@@ -1,4 +1,9 @@
 
+local textio = require("textio");
+
+local textreader = textio.reader;
+local textwriter = textio.writer;
+
 fails <- 0;
 
 UTF8_TESTS <- [
