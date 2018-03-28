@@ -61,11 +61,14 @@ endif()
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 add_library(package_host_so INTERFACE)
-target_link_libraries(package_host_so INTERFACE squirrel_pkg sqstdlib_pkg)
+#target_link_libraries(package_host_so INTERFACE squirrel sqstdlib)
+target_include_directories(package_host_so
+    INTERFACE
+        $<TARGET_PROPERTY:squirrel,INTERFACE_INCLUDE_DIRECTORIES>
+        $<TARGET_PROPERTY:sqstdlib,INTERFACE_INCLUDE_DIRECTORIES>
+)
 
 add_library(package_host_lib INTERFACE)
-# target_link_libraries(package_host_lib INTERFACE squirrel_ifc sqstdlib_ifc)
-# target_link_libraries(package_host_lib INTERFACE squirrel sqstdlib)
 target_include_directories(package_host_lib
     INTERFACE
         $<TARGET_PROPERTY:squirrel,INTERFACE_INCLUDE_DIRECTORIES>

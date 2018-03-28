@@ -1,14 +1,16 @@
 
+local XMLLEX = require("xml.lexer");
+
 local XML = {};
 
 class XML.node
 {
+    name = null;
     parent = null;
 }
 
 class XML.Tag extends XML.node
 {
-    name = null;
     attrs = null;
     childs = null
     
@@ -21,6 +23,7 @@ class XML.Tag extends XML.node
     
     function appendAttr( attr)
     {
+        attr.parent = this.weakref();
         attrs.append( attr);
     }
 
@@ -28,6 +31,25 @@ class XML.Tag extends XML.node
     {
         child.parent = this.weakref();
         childs.append( child);
+    }
+    
+    function getAttrib(name,defval=null)
+    {
+        foreach( a in attrs)
+            if( a.name == name)
+                return a.value;
+        return defval;
+    }
+    
+    function itChildNodes()
+    {
+        local function iter()
+        {
+            foreach( child in this.childs)
+                if( child instanceof XML.Tag)
+                    yield child;
+        }
+        return iter();
     }
     
     function dump()
@@ -68,6 +90,7 @@ class XML.Text extends XML.node
     
     constructor( text)
     {
+        this.name = "#TEXT";
         this.text = text;
     }
     
@@ -79,6 +102,12 @@ class XML.Text extends XML.node
 
 class XML.CDATA extends XML.Text
 {
+    constructor( text)
+    {
+        base.constructor( text);
+        this.name = "#CDATA";
+    }
+    
     function dump()
     {
         print( "<[CDATA[" + text + "]]>");
@@ -87,6 +116,12 @@ class XML.CDATA extends XML.Text
 
 class XML.Comment extends XML.Text
 {
+    constructor( text)
+    {
+        base.constructor( text);
+        this.name = "#COMMENT";
+    }
+    
     function dump()
     {
         print( "<!--" + text + "-->");
@@ -99,8 +134,9 @@ class XML.PI extends XML.Text
     
     constructor( target, text)
     {
-        this.target = target;
         base.constructor( text);
+        this.target = target;
+        this.name = "#PI";
     }
     
     function dump()
@@ -109,8 +145,20 @@ class XML.PI extends XML.Text
     }
 }
 
-class XML.DOCTYPE extends XML.Text
+class XML.DOCTYPE extends XML.node
 {
+    text = null;
+    
+    constructor( text)
+    {
+        this.text = text;
+        this.name = "#DOCTYPE";
+    }
+    
+    function dump()
+    {
+        print( text);
+    }
 }
 
 class XML.Document extends XML.Tag
@@ -135,7 +183,7 @@ class XML.Document extends XML.Tag
     }
 }
 
-class XML.xmllex_dbg extends xmllex
+class XML.xmllex_dbg extends XMLLEX
 {
     function next()
     {
@@ -232,6 +280,7 @@ class XML.Parser
                 tok = lex.next();
                 local value = parse_attr_value();
                 curtag.appendAttr( XML.Attr( name, value));
+                tok = lex.token;
             } break;
             
             case '>':
@@ -274,7 +323,8 @@ class XML.Parser
     function parseStream( fh, path)
     {
         path = path;
-        lex = XML.xmllex_dbg(fh);
+        //lex = XML.xmllex_dbg(fh);
+        lex = XMLLEX(fh);
         lex.preservespaces( preserveSpaces);
         
         doc = XML.Document("");
@@ -302,7 +352,7 @@ class XML.Parser
                 case 'S': doc.misc.append( XML.Text( parse_text())); tok = lex.token; break;
                 case '!': doc.misc.append( XML.Comment( lex.text)); tok = lex.next(); break;
                 case '?': doc.misc.append( XML.PI( lex.text)); tok = lex.next(); break;
-                default: throw "junk after root node"
+                default: ::print( "bad: " + tok + "\n"); throw "junk after root node"
             }
             
             return doc;

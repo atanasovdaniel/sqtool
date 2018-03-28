@@ -693,16 +693,13 @@ SQRESULT sqt_xmllex_load(HSQUIRRELVM v, const SQChar *opts, SQSTREAM stream)
     return sqt_xmllex_load_cb(v, opts, sqstd_STREAMREADFUNC, stream);
 }
 
-extern const SQRegClass _sqt_xmllex_decl;
-#define SQT_XMLLEX_TYPE_TAG ((SQUserPointer)(SQHash)&_sqt_xmllex_decl)
-
 static HSQMEMBERHANDLE xmllex__stream_handle;
 static HSQMEMBERHANDLE xmllex_token_handle;
 static HSQMEMBERHANDLE xmllex_text_handle;
 
 #define SETUP_XMLLEX(v) \
     read_ctx_t *ctx = NULL; \
-    if(SQ_FAILED(sq_getinstanceup(v,1,(SQUserPointer*)&ctx,(SQUserPointer)SQT_XMLLEX_TYPE_TAG))) \
+    if(SQ_FAILED(sq_getinstanceup(v,1,(SQUserPointer*)&ctx,SQT_XML_LEXER_TYPE_TAG))) \
         return sq_throwerror(v,_SC("invalid type tag"));
 
 static SQInteger __xmllex_releasehook(SQUserPointer p, SQInteger size)
@@ -711,11 +708,7 @@ static SQInteger __xmllex_releasehook(SQUserPointer p, SQInteger size)
     return 1;
 }
 
-static SQInteger _xmllex__typeof(HSQUIRRELVM v)
-{
-    sq_pushstring(v,_sqt_xmllex_decl.name,-1);
-    return 1;
-}
+static SQInteger _xmllex__typeof(HSQUIRRELVM v);
 
 static SQInteger _xmllex_constructor(HSQUIRRELVM v)
 {
@@ -723,7 +716,7 @@ static SQInteger _xmllex_constructor(HSQUIRRELVM v)
     const SQChar *opts = _SC("");
     read_ctx_t *ctx;
 
-    if( SQ_FAILED( sq_getinstanceup( v,2,(SQUserPointer*)&stream,(SQUserPointer)SQSTD_STREAM_TYPE_TAG))) {
+    if( SQ_FAILED( sq_getinstanceup( v,2,(SQUserPointer*)&stream,SQSTD_STREAM_TYPE_TAG))) {
         return sq_throwerror(v,ERR_MSG_ARG_NO_STREAM);
 	}
     
@@ -832,13 +825,19 @@ SQUserPointer _sqt_xml_lexer_type_tag(void)
     return (SQUserPointer)_sqt_xml_lexer_type_tag;
 }
 
-const SQRegClass _sqt_xmllex_decl = {
+static const SQRegClass _sqt_xmllex_decl = {
 //	NULL,               // base_class
 //    _SC("sqt_xml_lexer"),  // reg_name
     _SC("lexer"),		// name
 	_xmllex_members,	// members
 	_xmllex_methods,	// methods
 };
+
+static SQInteger _xmllex__typeof(HSQUIRRELVM v)
+{
+    sq_pushstring(v,_sqt_xmllex_decl.name,-1);
+    return 1;
+}
 
 SQUIRREL_API SQInteger SQPACKAGE_LOADFCT(HSQUIRRELVM v);
 SQInteger SQPACKAGE_LOADFCT(HSQUIRRELVM v)

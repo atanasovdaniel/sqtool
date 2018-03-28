@@ -6,7 +6,7 @@ include(CMakeParseArguments)
 function(add_sqmetaroot tgt_name)
     set(sqpackage_list_file ${CMAKE_BINARY_DIR}/sq_packages_list.h)
     
-    add_library(${tgt_name} STATIC etc/empty_c_file.c)
+    add_library(${tgt_name} STATIC etc/builtin_packages_list.c)
     target_link_libraries(${tgt_name} PUBLIC package_host_lib)
 #    target_include_directories(${tgt_name} INTERFACE ${CMAKE_BINARY_DIR})
     target_include_directories(${tgt_name} PRIVATE
@@ -58,7 +58,7 @@ function(add_sqmetapkg_so pkg_vname)
     sqpackage_parse_pkg_vname(sqmetapkgso)
     MESSAGE( STATUS "sqmetapkg so: ${pkg_vname}, target:${cpkg_target}, inst:/${cpkg_proot}")
     
-    add_library(${cpkg_target} MODULE qaz.c)
+    add_library(${cpkg_target} SHARED ${CMAKE_HOME_DIRECTORY}/etc/empty_source.c)
     set_target_properties(${cpkg_target} PROPERTIES PREFIX "")
     set_target_properties(${cpkg_target} PROPERTIES OUTPUT_NAME "${cpkg_pname}")
 
@@ -86,7 +86,7 @@ function(add_sqpackage_so pkg_vname)
     sqpackage_parse_pkg_vname(sqpackageso)
     MESSAGE( STATUS "sqpackage so: ${pkg_vname} , target:${cpkg_target}, inst:/${cpkg_proot}")
 
-    add_library(${cpkg_target} MODULE ${arg_SOURCES})
+    add_library(${cpkg_target} SHARED ${arg_SOURCES})
     set_target_properties(${cpkg_target} PROPERTIES PREFIX "")
     set_target_properties(${cpkg_target} PROPERTIES OUTPUT_NAME "${cpkg_pname}")
 
@@ -113,27 +113,29 @@ function(add_sqpackage_lib pkg_vname)
         ${ARGN} # arguments of the function to parse, here we take the all original ones
     )
     sqpackage_parse_pkg_vname(sqpackagelib)
-    MESSAGE( STATUS "sqpackage lib: ${pkg_vname} @ ${sqmetapkg_target}, target:${cpkg_target}")
-
-    add_library(${cpkg_target} STATIC ${arg_SOURCES})
-
-    ##target_include_directories(${cpkg_target} PRIVATE $<TARGET_PROPERTY:package_host_lib,INTERFACE_INCLUDE_DIRECTORIES>)
-    target_link_libraries(${cpkg_target} PUBLIC package_host_lib)
-    
-    target_compile_definitions(${cpkg_target} PRIVATE
-        SQPACKAGE_VNAME="${pkg_vname}"
-        SQPACKAGE_LOADFCT=sqload_${cpkg_cname}
-    )
-
-    #target_sources(${sqmetapkg_target} PRIVATE $<TARGET_OBJECTS:${cpkg_target}>)
-    #target_link_libraries(${sqmetapkg_target} PRIVATE ${cpkg_target})
-    #get_property(prev_props TARGET sq_builtin_packages PROPERTY QAZ)
-    set_property( TARGET ${sqmetapkg_target} APPEND PROPERTY QAZ ${cpkg_target})
 
     if( ${sqmetapkg_target_type} STREQUAL LIB)
+        MESSAGE( STATUS "sqpackage lib: ${pkg_vname} @ ${sqmetapkg_target}, target:${cpkg_target}")
+        
+        add_library(${cpkg_target} STATIC ${arg_SOURCES})
+
+        target_link_libraries(${cpkg_target} PUBLIC package_host_lib)
+    
+        target_compile_definitions(${cpkg_target} PRIVATE
+            SQPACKAGE_VNAME="${pkg_vname}"
+            SQPACKAGE_LOADFCT=sqload_${cpkg_cname}
+        )
+        
+        set_property( TARGET ${sqmetapkg_target} APPEND PROPERTY QAZ ${cpkg_target})
         file(APPEND ${sqpackage_list_file}  "SQ_PACKAGE_DEF(${pkg_vname},sqload_${cpkg_cname})\n")
+    else()
+        MESSAGE( STATUS "sqpackage mso: ${pkg_vname} @ ${sqmetapkg_target}")
+        
+        set_source_files_properties( ${arg_SOURCES} PROPERTIES COMPILE_DEFINITIONS "SQPACKAGE_VNAME=\"${pkg_vname}\";SQPACKAGE_LOADFCT=sqload_${cpkg_cname}")
+        
+        target_sources( ${sqmetapkg_target} PUBLIC ${arg_SOURCES})
     endif()
 
-    set(sqpackage_target ${cpkg_target} PARENT_SCOPE)
+    set(sqpackage_target ${sqmetapkg_target} PARENT_SCOPE)
 endfunction(add_sqpackage_lib)
 
