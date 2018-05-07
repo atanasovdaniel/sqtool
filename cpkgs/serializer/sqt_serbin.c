@@ -95,7 +95,7 @@ static DEF_BSWAP( uint64_t)
 static DEF_BSWAP( float)
 static DEF_BSWAP( double)
 
-static SQRESULT read_bytes( const read_ctx_t *ctx, SQUserPointer ptr, SQInteger len)
+static SQRESULT read_bytes( const read_ctx_t *ctx, void *ptr, SQInteger len)
 {
     if( ctx->readfct( ctx->user, ptr, len) != len) {
         return sq_throwerror(ctx->v,ERR_MSG_READ);
@@ -193,7 +193,7 @@ static SQRESULT read_float( const read_ctx_t *ctx, SQInteger len, SQFloat *pres)
             if( ctx->flags & SBF_SWAP) l = bswap_float( l);
             *pres = (SQFloat)l;
         } break;
-        
+
 		case 8: {
             double l;
             r = read_bytes(ctx, &l, 8);
@@ -277,7 +277,7 @@ rd_string: {
         }
 		return SQ_ERROR;
 	}
-	
+
 rd_array: {
 		SQInteger idx = 0;
 		sq_newarray(ctx->v,len);								// array
@@ -320,11 +320,11 @@ rd_blob: {
         }
 		sq_poptop(ctx->v);                                              //
 		return SQ_ERROR;
-		
+
 	}
 }
 
-static SQRESULT write_bytes( const write_ctx_t *ctx, SQUserPointer ptr, SQInteger len)
+static SQRESULT write_bytes( const write_ctx_t *ctx, const void *ptr, SQInteger len)
 {
 	if( ctx->writefct( ctx->user, ptr, len) != len) {
         return sq_throwerror(ctx->v,ERR_MSG_WRITE);
@@ -448,7 +448,7 @@ SQRESULT sqt_serbin_write( const write_ctx_t *ctx)
 				if( SQ_FAILED( write_unsigned( ctx, 0xC8, len)))
 					return SQ_ERROR;
 			}
-            return write_bytes(ctx, (SQUserPointer)s, len);
+            return write_bytes(ctx, s, len);
 		}
 		case OT_TABLE: {
 			SQUnsignedInteger len = sq_getsize(ctx->v,-1);
@@ -543,16 +543,16 @@ SQRESULT sqt_serbin_load_cb(HSQUIRRELVM v, SQ_UNUSED_ARG(const SQChar *opts), SQ
 {
     read_ctx_t ctx;
     uint32_t magic;
-    
+
     ctx.flags = 0;
     ctx.v = v;
     ctx.readfct = readfct;
     ctx.user = user;
-    
+
     if( SQ_FAILED(read_bytes(&ctx, &magic, sizeof(magic)))) {
         return SQ_ERROR;
     }
-    
+
     if( magic == MAGIC_NORMAL) {
         // ok
     }
@@ -562,7 +562,7 @@ SQRESULT sqt_serbin_load_cb(HSQUIRRELVM v, SQ_UNUSED_ARG(const SQChar *opts), SQ
     else {
         return sq_throwerror(v,ERR_MSG_MAGIC);
     }
-    
+
 	return sqt_serbin_read( &ctx);
 }
 
@@ -576,11 +576,11 @@ static SQRESULT _g_serbin_loadbinary(HSQUIRRELVM v)
                                 // this stream opts...
 	SQSTREAM stream;
     const SQChar *opts = 0;
-    
-    if( SQ_FAILED( sq_getinstanceup( v,2,(SQUserPointer*)&stream,(SQUserPointer)SQSTD_STREAM_TYPE_TAG))) {
+
+    if( SQ_FAILED( sq_getinstanceup( v,2,(SQUserPointer*)&stream,SQSTD_STREAM_TYPE_TAG))) {
         return sq_throwerror(v,ERR_MSG_ARG_NO_STREAM);
 	}
-    
+
     if( sq_gettop(v) > 2)
     {
         sq_getstring(v,3,&opts);
@@ -598,17 +598,17 @@ SQRESULT sqt_serbin_save_cb( HSQUIRRELVM v, SQ_UNUSED_ARG(const SQChar *opts), S
 {
     write_ctx_t ctx;
     uint32_t magic;
-    
+
     ctx.flags = 0;
     ctx.v = v;
     ctx.writefct = writefct;
     ctx.user = user;
-    
+
     magic = MAGIC_NORMAL;
     if(SQ_FAILED(write_bytes(&ctx, &magic, sizeof(magic)))) {
         return SQ_ERROR;
     }
-    
+
 	return sqt_serbin_write( &ctx);
 }
 
@@ -622,18 +622,18 @@ static SQRESULT _g_serbin_savebinary(HSQUIRRELVM v)
                                 // this stream data opts...
 	SQSTREAM stream;
     const SQChar *opts = _SC("");
-    
-    if( SQ_FAILED( sq_getinstanceup( v,2,(SQUserPointer*)&stream,(SQUserPointer)SQSTD_STREAM_TYPE_TAG))) {
+
+    if( SQ_FAILED( sq_getinstanceup( v,2,(SQUserPointer*)&stream,SQSTD_STREAM_TYPE_TAG))) {
         return sq_throwerror(v,ERR_MSG_ARG_NO_STREAM);
 	}
-    
+
     if( sq_gettop(v) > 3)
     {
         sq_push(v,3);           // this stream data opts.. data
         sq_remove(v,3);         // this stream opts.. data
         sq_getstring(v,3,&opts);
     }
-    
+
 	if(SQ_SUCCEEDED(sqt_serbin_save(v, opts, stream))) {
 		return 0;   // no return value
     }

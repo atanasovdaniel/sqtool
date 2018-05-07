@@ -57,15 +57,15 @@ typedef struct
     SQWRITEFUNC writefct;
     SQUserPointer user;
     HSQUIRRELVM v;
-    
+
     SQInteger ind;
-    
+
     const SQChar    *str_nl;
     SQInteger       str_nl_len;
-    
+
     const SQChar    *str_ind;
     SQInteger       str_ind_len;
-    
+
 } write_ctx_t;
 
 
@@ -92,8 +92,7 @@ static const SQChar ERR_MSG_OBJECT_TYPE[]   = _SC("non-serializable object type"
 
 static SQRESULT write_check( const write_ctx_t *ctx, const SQChar *ptr, SQInteger len)
 {
-    // warning: passing argument 2 of ‘ctx->writefct’ discards ‘const’ qualifier from pointer target type
-    if( ctx->writefct( ctx->user, (SQUserPointer)ptr, len) == len) {
+    if( ctx->writefct( ctx->user, ptr, len) == len) {
         return SQ_OK;
     }
 	return SQ_ERROR;
@@ -105,15 +104,15 @@ static SQRESULT json_escape( const write_ctx_t *ctx, const SQChar *src)
     {
         const SQChar *from = src;
         SQChar c;
-        
+
         while( (c = *src) && (c != _SC('"')) && (c != _SC('\\')) && (c != _SC('/')) && (c >= _SC(' ')) )
             src++;
-        
+
         if( src - from) {
             if( SQ_FAILED(write_check(ctx, from, (src - from)*sizeof(SQChar))))
     			return SQ_ERROR;
         }
-        
+
         if( c) {
             src++;
             switch( c) {
@@ -131,13 +130,13 @@ static SQRESULT json_escape( const write_ctx_t *ctx, const SQChar *src)
                         return SQ_ERROR;
                 } continue;
             }
-            
+
             SQChar esc[2] = { _SC('\\'), c };
             if( SQ_FAILED(write_check(ctx, esc, sizeof(esc))))
     			return SQ_ERROR;
         }
     }
-    
+
     return SQ_OK;
 }
 
@@ -146,7 +145,7 @@ static SQRESULT nl_indent( const write_ctx_t *ctx)
     if( ctx->str_nl_len && ctx->str_ind_len) {
         if( SQ_FAILED(write_check(ctx, ctx->str_nl, ctx->str_nl_len)))
             return SQ_ERROR;
-    
+
         if( ctx->str_ind_len) {
             SQInteger ind = ctx->ind;
             while( ind--) {
@@ -155,7 +154,7 @@ static SQRESULT nl_indent( const write_ctx_t *ctx)
             }
         }
     }
-        
+
     return SQ_OK;
 }
 
@@ -334,24 +333,24 @@ static SQRESULT sqt_serjson_write( write_ctx_t *ctx)
 static SQChar read_char( read_ctx_t *ctx)
 {
     SQChar c;
-    
+
     if( ctx->back_char) {
         c = ctx->back_char;
         ctx->back_char = 0;
         return c;
     }
-    
+
     if( ctx->readfct( ctx->user, &c, sizeof(SQChar)) != sizeof(SQChar)) {
         return SQ_EOF;
     }
-    
+
     return c;
 }
 
 static SQRESULT skip_spaces( read_ctx_t *ctx, SQChar *pc)
 {
     SQChar c;
-    
+
     // skip spaces
     while(1) {
         while( ((c = read_char(ctx)) != SQ_EOF) && scisspace(c));
@@ -369,10 +368,10 @@ static SQRESULT skip_spaces( read_ctx_t *ctx, SQChar *pc)
                 /* block comment */
                 while(1) {
                     while( ((c = read_char(ctx)) != SQ_EOF) && (c != _SC('*')) );
-                
+
                     if( c != SQ_EOF)
                         while( ((c = read_char(ctx)) != SQ_EOF) && (c == _SC('*')) );
-                
+
                     if( c == _SC('/')) {
                         break;
                     }
@@ -390,7 +389,7 @@ static SQRESULT skip_spaces( read_ctx_t *ctx, SQChar *pc)
         }
         else break;
     }
-    
+
     *pc = c;
     return SQ_OK;
 }
@@ -440,7 +439,7 @@ static SQRESULT read_number( read_ctx_t *ctx, SQChar *pc)
     }
 //     else if( c == _SC('-') ) {
 //     }
-    
+
     while( ((c = read_char(ctx)) != SQ_EOF) && scisdigit(c)) {
         STORE( c);
         have_num = 1;
@@ -496,10 +495,10 @@ static SQRESULT read_number( read_ctx_t *ctx, SQChar *pc)
 static SQRESULT sqt_serjson_read( read_ctx_t *ctx)
 {
     SQChar c;
-    
+
     if(SQ_FAILED(skip_spaces(ctx,&c)))
         return SQ_ERROR;
-    
+
     if( c == _SC('"')) {
         // string
         SQInteger str_aloc = STR_STEP;
@@ -672,7 +671,7 @@ static SQRESULT sqt_serjson_read( read_ctx_t *ctx)
     else {
         return sq_throwerror(ctx->v,ERR_MSG_BAD_CONTENT);
     }
-    
+
     return SQ_OK;
 }
 
@@ -680,12 +679,12 @@ static SQRESULT sqt_serjson_read( read_ctx_t *ctx)
 SQRESULT sqt_serjson_load_cb(HSQUIRRELVM v, SQ_UNUSED_ARG(const SQChar *opts), SQREADFUNC readfct, SQUserPointer user)
 {
     read_ctx_t ctx;
-    
+
     ctx.v = v;
     ctx.readfct = readfct;
     ctx.user = user;
     ctx.back_char = 0;
-    
+
 	return sqt_serjson_read( &ctx);
 }
 
@@ -700,15 +699,15 @@ static SQRESULT _g_serjson_load(HSQUIRRELVM v)
 	SQSTREAM stream;
     const SQChar *opts = _SC("");
 
-    if( SQ_FAILED( sq_getinstanceup( v,2,(SQUserPointer*)&stream,(SQUserPointer)SQSTD_STREAM_TYPE_TAG))) {
+    if( SQ_FAILED( sq_getinstanceup( v,2,(SQUserPointer*)&stream,SQSTD_STREAM_TYPE_TAG))) {
         return sq_throwerror(v,ERR_MSG_ARG_NO_STREAM);
 	}
-    
+
     if( sq_gettop(v) > 2)
     {
         sq_getstring(v,3,&opts);
     }
-    
+
 	if(SQ_SUCCEEDED(sqt_serjson_load(v, opts, stream))) {
                                         // this stream opts... data
 		return 1;
@@ -721,19 +720,19 @@ SQRESULT sqt_serjson_save_cb( HSQUIRRELVM v, const SQChar *opts, SQWRITEFUNC wri
 {
     write_ctx_t ctx;
     const SQChar *c = opts;
-    
+
     ctx.v = v;
     ctx.writefct = writefct;
     ctx.user = user;
-    
+
     ctx.ind = 0;
-    
+
     ctx.str_nl = _SC("\n");
     ctx.str_nl_len = 1;
-    
+
     ctx.str_ind = _SC("\t");
     ctx.str_ind_len = 1;
-    
+
     while( *c)
     {
         if( (c[0] == _SC('i')) && c[1]) {   // Indentation char
@@ -768,7 +767,7 @@ SQRESULT sqt_serjson_save_cb( HSQUIRRELVM v, const SQChar *opts, SQWRITEFUNC wri
         }
         c++;
     }
-    
+
 	if(SQ_FAILED(sqt_serjson_write( &ctx))) {
             return SQ_ERROR;
     }
@@ -786,17 +785,17 @@ static SQRESULT _g_serjson_save(HSQUIRRELVM v)
 	SQSTREAM stream;
     const SQChar *opts = _SC("");
 
-    if( SQ_FAILED( sq_getinstanceup( v,2,(SQUserPointer*)&stream,(SQUserPointer)SQSTD_STREAM_TYPE_TAG))) {
+    if( SQ_FAILED( sq_getinstanceup( v,2,(SQUserPointer*)&stream,SQSTD_STREAM_TYPE_TAG))) {
         return sq_throwerror(v,ERR_MSG_ARG_NO_STREAM);
 	}
-    
+
     if( sq_gettop(v) > 3)
     {
         sq_push(v,3);           // this stream data opts... data
         sq_remove(v,3);         // this stream opts... data
         sq_getstring(v,3,&opts);
     }
-    
+
 	if(SQ_SUCCEEDED(sqt_serjson_save(v,opts,stream))) {
 		return 0;   // no return value
     }
