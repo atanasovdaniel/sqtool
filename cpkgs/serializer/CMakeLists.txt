@@ -16,8 +16,8 @@
 
 add_sqmetapkg_lib( serializer)
 
-add_sqpackage_so( serializer.json SOURCES sqt_serjson.c)
-#add_sqpackage_lib( serializer.json SOURCES sqt_serjson.c)
+#add_sqpackage_so( serializer.json SOURCES sqt_serjson.c)
+add_sqpackage_lib( serializer.json SOURCES sqt_serjson.c)
 
 #add_sqpackage_so( serializer.binary SOURCES sqt_serbin.c)
 add_sqpackage_lib( serializer.binary SOURCES sqt_serbin.c)
