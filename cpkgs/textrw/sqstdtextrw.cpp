@@ -34,7 +34,9 @@ THE SOFTWARE.
 #include <sqstdblob.h>
 #include "sqstdtextrw.h"
 
-#define DEFAULT_BAD_CHAR    '?'
+#define DEFAULT_BAD_CHAR_ASCII  '?'
+#define DEFAULT_BAD_CHAR        0xFFFD
+#define BOM_CODEPOINT           0xFEFF
 
 #define CV_OK       0
 #define CV_ILUNI    100
@@ -77,6 +79,7 @@ typedef struct cv_tag
     cvReadFct read;
     cvWriteFct write;
     cvStrSizeFct strsize;
+    uint32_t bad_char;
     unsigned int min_char_size;
     unsigned int mean_char_size;
 } cv_t;
@@ -162,7 +165,7 @@ static int cvReadUTF8( uint32_t *pwc, const uint8_t **pbuf, const uint8_t* const
                 wc <<= 6; wc |= c & 0x3F;
             }
             if( wc < utf8_min_codept[codelen]) { *pbuf = buf; return CV_ILSEQ; }
-            if( wc != 0xFEFF) {
+            if( wc != BOM_CODEPOINT) {
                 *pbuf = buf;
                 *pwc = wc;
                 return CV_OK;
@@ -216,7 +219,7 @@ static int cvReadUTF16( uint32_t *pwc, const uint8_t **pbuf, const uint8_t* cons
         uint16_t c;
         if( (buf_end-buf) < (int)sizeof(uint16_t)) { *pbuf = buf; return -(sizeof(uint16_t) - (buf_end-buf)); }
         c = *(const uint16_t*)buf;
-        if( c == 0xFEFF)		{ buf += sizeof(uint16_t); }
+        if( c == BOM_CODEPOINT)		{ buf += sizeof(uint16_t); }
         else if( c >= 0xD800 && c < 0xDC00) {
             uint32_t wc = c;
             if( (buf_end-buf) < 2*(int)sizeof(uint16_t)) { *pbuf = buf; return -(2*sizeof(uint16_t) - (buf_end-buf)); }
@@ -283,7 +286,7 @@ static int cvReadUTF16REV( uint32_t *pwc, const uint8_t **pbuf, const uint8_t* c
         if( (buf_end-buf) < (int)sizeof(uint16_t)) { *pbuf = buf; return -(sizeof(uint16_t) - (buf_end-buf)); }
         c = *(const uint16_t*)buf;
         c = CV_SWAP_U16(c);
-        if( c == 0xFEFF)		{ buf += sizeof(uint16_t); }
+        if( c == BOM_CODEPOINT)		{ buf += sizeof(uint16_t); }
         else if( c >= 0xD800 && c < 0xDC00) {
             uint32_t wc = c;
             if( (buf_end-buf) < 2*(int)sizeof(uint16_t)) { *pbuf = buf; return -(2*sizeof(uint16_t) - (buf_end-buf)); }
@@ -421,12 +424,12 @@ static int cvWriteUTF32REV( uint32_t wc, uint8_t **pbuf, const uint8_t* const bu
  all conversions
 ================ */
 
-static const cv_t cvASCII = { cvReadASCII, cvWriteASCII, cvStrSizeUTF8, 1, 1 };
-static const cv_t cvUTF8 = { cvReadUTF8, cvWriteUTF8, cvStrSizeUTF8, 1, 3 };
-static const cv_t cvUTF16 = { cvReadUTF16, cvWriteUTF16, cvStrSizeUTF16, 2, 2 };
-static const cv_t cvUTF16REV = { cvReadUTF16REV, cvWriteUTF16REV, cvStrSizeUTF16, 2, 2 };
-static const cv_t cvUTF32 = { cvReadUTF32, cvWriteUTF32, cvStrSizeUTF32, 4, 4 };
-static const cv_t cvUTF32REV = { cvReadUTF32REV, cvWriteUTF32REV, cvStrSizeUTF32, 4, 4 };
+static const cv_t cvASCII = { cvReadASCII, cvWriteASCII, cvStrSizeUTF8, DEFAULT_BAD_CHAR_ASCII, 1, 1 };
+static const cv_t cvUTF8 = { cvReadUTF8, cvWriteUTF8, cvStrSizeUTF8, DEFAULT_BAD_CHAR, 1, 3 };
+static const cv_t cvUTF16 = { cvReadUTF16, cvWriteUTF16, cvStrSizeUTF16, DEFAULT_BAD_CHAR, 2, 2 };
+static const cv_t cvUTF16REV = { cvReadUTF16REV, cvWriteUTF16REV, cvStrSizeUTF16, DEFAULT_BAD_CHAR, 2, 2 };
+static const cv_t cvUTF32 = { cvReadUTF32, cvWriteUTF32, cvStrSizeUTF32, DEFAULT_BAD_CHAR, 4, 4 };
+static const cv_t cvUTF32REV = { cvReadUTF32REV, cvWriteUTF32REV, cvStrSizeUTF32, DEFAULT_BAD_CHAR, 4, 4 };
 
 static const cv_t &cvSQChar( void)
 {
@@ -500,11 +503,54 @@ SQInteger sqstd_textencbyname( const SQChar *name)
     return -1;
 }
 
+static const cv_t *cv_by_id( int enc_id)
+{
+    const uint16_t tmp = 1;
+    switch( enc_id)
+    {
+        case SQTEXTENC_UTF8:
+            return &cvUTF8;
+
+        case SQTEXTENC_UTF16:
+            return &cvUTF16;
+        case SQTEXTENC_UTF16BE:
+            if( *(const uint8_t*)&tmp == 1)
+                // localy little endian
+                return &cvUTF16REV;
+            else
+                return &cvUTF16;
+        case SQTEXTENC_UTF16LE:
+            if( *(const uint8_t*)&tmp == 1)
+                return &cvUTF16;
+            else
+                return &cvUTF16REV;
+
+        case SQTEXTENC_UTF32:
+            return &cvUTF32;
+        case SQTEXTENC_UTF32BE:
+            if( *(const uint8_t*)&tmp == 1)
+                return &cvUTF32REV;
+            else
+                return &cvUTF32;
+        case SQTEXTENC_UTF32LE:
+            if( *(const uint8_t*)&tmp == 1)
+                return &cvUTF32;
+            else
+                return &cvUTF32REV;
+
+        case SQTEXTENC_ASCII:
+            return &cvASCII;
+
+        default:
+            return NULL;
+    }
+}
+
 /* ====================================
 		Check char
 ==================================== */
 
-int cvCheckChar( const SQChar *str, SQInteger len, cvWriteFct write, uint32_t *pwc)
+static int cvCheckChar( const SQChar *str, SQInteger len, cvWriteFct write, uint32_t *pwc)
 {
     const uint8_t *rdbuf = (const uint8_t*)str;
     uint32_t wc;
@@ -526,19 +572,26 @@ int cvCheckChar( const SQChar *str, SQInteger len, cvWriteFct write, uint32_t *p
     return r;
 }
 
+static int cvCheckBadChar( const SQChar *str, SQInteger len, const cv_t &cv, uint32_t *bad_char)
+{
+    if( str != 0) {
+        if( *str != _SC('\0')) {
+            return cvCheckChar( str, len, cv.write, bad_char);
+        }
+        else {
+            *bad_char = 0;
+        }
+    }
+    else {
+        *bad_char = cv.bad_char;
+    }
+    return CV_OK;
+}
+
+
 /* ====================================
-		Convert buffer
+	Convert buffer
 ==================================== */
-
-/*
-    returns:
-        0 - CV_OK       - OK, all input buffer converted
-        >0              - Output buffer is full (additional bytes needed)
-        100 - CV_ILUNI  - Try to output invalid code
-        <0              - Input buffer is empty
-        -100 - CV_ILSEQ - Invalid code read from input
-
-*/
 
 class cvTextAlloc
 {
@@ -577,14 +630,15 @@ private:
         do {
             r = _write( wc, &_out_ptr, _output + _out_alloc);
             if( r == CV_ILUNI) {
-                if( _bad_char) {
+                _errors++;
+                //if( _bad_char) {
                     wc = _bad_char;
                     r = _write( wc, &_out_ptr, _output + _out_alloc);
                     if( r == CV_ILUNI)
                         break;
-                }
-                else
-                    break;
+                //}
+                //else
+                //    break;
             }
             if( r > 0) {
                 Grow();
@@ -595,17 +649,20 @@ private:
 
     cvTextAlloc();
 public:
-    cvTextAlloc( const cv_tag &from, const cv_tag &to, uint32_t bad_char) :
+    cvTextAlloc( const cv_tag &from, const cv_tag &to) :
         _read( from.read),
         _write( to.write),
-        _bad_char(bad_char),
+        _bad_char( to.bad_char),
         _from_min( from.min_char_size),
-        _to_mean( to.mean_char_size)
+        _to_mean( to.mean_char_size),
+        _errors( 0)
 //        _output(0),
 //        _out_alloc(0)
     {}
 
-    int Convert( const uint8_t *inbuf, const uint8_t* const inbuf_end,
+    int _errors;
+
+    SQInteger Convert( const uint8_t *inbuf, const uint8_t* const inbuf_end,
                  uint8_t **poutbuf, uint8_t **poutbuf_end, size_t *poutbuf_alloc)
     {
         int r = CV_OK;
@@ -618,13 +675,14 @@ public:
             uint32_t wc;
             r = _read( &wc, &_inbuf, _inbuf_end);
             if( r != CV_OK ) {      // CV_ILSEQ or input buffer ends with partial codepoint
-                if( _bad_char) {    //  both cases are threated as CV_ILSEQ
+                _errors++;
+                //if( _bad_char) {    //  both cases are threated as CV_ILSEQ
                     wc = _bad_char;
                     if( r != CV_ILSEQ) { //  but for EOB also input is terminated
                         _inbuf = _inbuf_end;
                     }
-                }
-                else break;
+                //}
+                //else break;
             }
             r = Append( wc);
         }
@@ -633,7 +691,7 @@ public:
         *poutbuf_end = _output + out_len;
         *poutbuf = _output;
         *poutbuf_alloc = _out_alloc;
-        return r;
+        return ((r == CV_OK) && !_errors) ? SQ_OK : SQ_ERROR;
     }
 };
 
@@ -717,9 +775,9 @@ class cvTextToQSChar : protected cvTextAlloc
     cvTextToQSChar();
 public:
     cvTextToQSChar( const cv_tag &from) :
-        cvTextAlloc( from, cvSQChar(), DEFAULT_BAD_CHAR)
+        cvTextAlloc( from, cvSQChar())
     {}
-    int Convert( const uint8_t *inbuf, const uint8_t* const inbuf_end,
+    SQInteger Convert( const uint8_t *inbuf, const uint8_t* const inbuf_end,
                  SQChar **pstr, SQUnsignedInteger *palloc, SQInteger *plen)
     {
         SQChar *outbuf_end;
@@ -848,7 +906,7 @@ static SQInteger sqstd_UTF32REV_to_SQChar( const uint32_t *inbuf, SQInteger inbu
                  const SQChar **pstr, SQUnsignedInteger *palloc, SQInteger *plen)
 {
     if( inbuf_size == -1) {
-        inbuf_size = cvStrSizeUTF16( (const uint8_t*)inbuf);
+        inbuf_size = cvStrSizeUTF32( (const uint8_t*)inbuf);
     }
     if( sizeof(SQChar) == sizeof(uint32_t)) {
         return sqstd_UTF32_to_UTF32REV( inbuf, inbuf_size, (const uint32_t**)pstr, palloc, plen);
@@ -929,9 +987,9 @@ class cvTextFromQSChar : protected cvTextAlloc
     cvTextFromQSChar();
 public:
     cvTextFromQSChar( const cv_tag &to) :
-        cvTextAlloc( cvSQChar(), to, DEFAULT_BAD_CHAR)
+        cvTextAlloc( cvSQChar(), to)
     {}
-    int Convert( const SQChar *str, SQInteger str_len,
+    SQInteger Convert( const SQChar *str, SQInteger str_len,
                  uint8_t **pout, SQInteger *pout_size, SQUnsignedInteger *pout_alloc)
     {
         uint8_t *outbuf_end;
@@ -1151,44 +1209,48 @@ SQInteger sqstd_get_UTF(HSQUIRRELVM v, SQInteger idx, int encoding, const void *
 
 
 // UTF_X --> stack
-void sqstd_push_UTF8(HSQUIRRELVM v, const uint8_t *inbuf, SQInteger inbuf_size)
+SQInteger sqstd_push_UTF8(HSQUIRRELVM v, const uint8_t *inbuf, SQInteger inbuf_size)
 {
     const SQChar *str;
     SQUnsignedInteger str_alloc;
     SQInteger str_len;
-    sqstd_UTF8_to_SQChar( inbuf, inbuf_size, &str, &str_alloc, &str_len);
+    SQInteger r = sqstd_UTF8_to_SQChar( inbuf, inbuf_size, &str, &str_alloc, &str_len);
     sq_pushstring(v, str, str_len);
     sqstd_textrelease( str, str_alloc);
+    return r;
 }
 
-void sqstd_push_UTF16(HSQUIRRELVM v, const uint16_t *inbuf, SQInteger inbuf_size)
+SQInteger sqstd_push_UTF16(HSQUIRRELVM v, const uint16_t *inbuf, SQInteger inbuf_size)
 {
     const SQChar *str;
     SQUnsignedInteger str_alloc;
     SQInteger str_len;
-    sqstd_UTF16_to_SQChar( inbuf, inbuf_size, &str, &str_alloc, &str_len);
+    SQInteger r = sqstd_UTF16_to_SQChar( inbuf, inbuf_size, &str, &str_alloc, &str_len);
     sq_pushstring(v, str, str_len);
     sqstd_textrelease( str, str_alloc);
+    return r;
 }
 
-void sqstd_push_UTF32(HSQUIRRELVM v, const uint32_t *inbuf, SQInteger inbuf_size)
+SQInteger sqstd_push_UTF32(HSQUIRRELVM v, const uint32_t *inbuf, SQInteger inbuf_size)
 {
     const SQChar *str;
     SQUnsignedInteger str_alloc;
     SQInteger str_len;
-    sqstd_UTF32_to_SQChar( inbuf, inbuf_size, &str, &str_alloc, &str_len);
+    SQInteger r = sqstd_UTF32_to_SQChar( inbuf, inbuf_size, &str, &str_alloc, &str_len);
     sq_pushstring(v, str, str_len);
     sqstd_textrelease( str, str_alloc);
+    return r;
 }
 
-void sqstd_push_UTF(HSQUIRRELVM v, int encoding, const void *inbuf, SQInteger inbuf_size)
+SQInteger sqstd_push_UTF(HSQUIRRELVM v, int encoding, const void *inbuf, SQInteger inbuf_size)
 {
     const SQChar *str;
     SQUnsignedInteger str_alloc;
     SQInteger str_len;
-    sqstd_UTF_to_SQChar( encoding, inbuf, inbuf_size, &str, &str_alloc, &str_len);
+    SQInteger r = sqstd_UTF_to_SQChar( encoding, inbuf, inbuf_size, &str, &str_alloc, &str_len);
     sq_pushstring(v, str, str_len);
     sqstd_textrelease( str, str_alloc);
+    return r;
 }
 
 /* ====================================
@@ -1197,83 +1259,81 @@ void sqstd_push_UTF(HSQUIRRELVM v, int encoding, const void *inbuf, SQInteger in
 
 struct SQTextReader
 {
-    SQTextReader( SQStream *stream, const cv_t *cv) : _stream(stream), _cv(cv), _buf_len(0), _buf_pos(0), _bad_char(0)
+    SQTextReader( SQStream *stream, const cv_t *cv) : _stream(stream), _cv(cv),
+        _bad_char(0), _buf_len(0), _buf_pos(0), _wc_buf_pos(0), _wc_buf_len(0), _errors(0)
     {
     }
 
     int SetBadChar( const SQChar *str, SQInteger len)
     {
-        if( str != 0) {
-            return cvCheckChar( str, len, _cv->write, &_bad_char);
-        }
-        else {
-            _bad_char = 0;
-            return CV_OK;
-        }
+        return cvCheckBadChar( str, len, cvSQChar(), &_bad_char);
     }
+
+    int ClearErrors( void) { int r = _errors; _errors = 0; return r; }
 
     int ReadBOM(void)
     {
-        uint8_t buf[8];
-        SQInteger buf_len;
+        uint8_t tmp_buf[8];
+        SQInteger tmp_buf_len;
         int r = CV_OK;
-        buf_len = sqstd_sread( buf, 4, (SQSTREAM)_stream);
-        switch( buf_len)
+        tmp_buf_len = sqstd_sread( tmp_buf, 4, (SQSTREAM)_stream);
+        switch( tmp_buf_len)
         {
             case 4:
-                if( *(uint32_t*)buf == 0x0000FEFFL) {
+                if( *(uint32_t*)tmp_buf == 0x0000FEFFL) {
                     // UTF32
-                    buf_len = 0;
+                    tmp_buf_len = 0;
                     _cv = &cvUTF32;
                 }
-                else if( *(uint32_t*)buf == 0xFFFE0000L) {
+                else if( *(uint32_t*)tmp_buf == 0xFFFE0000L) {
                     // UTF32_REV
-                    buf_len = 0;
+                    tmp_buf_len = 0;
                     _cv = &cvUTF32REV;
                 }
             case 3:
-                if( (buf[0] == 0xEF) && (buf[1] == 0xBB) && (buf[2] == 0xBF)) {
+                if( (tmp_buf[0] == 0xEF) && (tmp_buf[1] == 0xBB) && (tmp_buf[2] == 0xBF)) {
                     // UTF8
-                    buf[0] = buf[3];
-                    buf_len = (buf_len > 3) ? buf_len - 3 : 0;
+                    tmp_buf[0] = tmp_buf[3];
+                    tmp_buf_len = (tmp_buf_len > 3) ? tmp_buf_len - 3 : 0;
                     _cv = &cvUTF8;
                 }
             case 2:
-                if( *(uint16_t*)buf == 0xFEFF) {
+                if( *(uint16_t*)tmp_buf == 0xFEFF) {
                     // UTF16
-                    *(uint16_t*)buf = *(uint16_t*)(buf+2);
-                    buf_len = (buf_len > 2) ? buf_len - 2 : 0;
+                    *(uint16_t*)tmp_buf = *(uint16_t*)(tmp_buf+2);
+                    tmp_buf_len = (tmp_buf_len > 2) ? tmp_buf_len - 2 : 0;
                     _cv = &cvUTF16;
                 }
-                else if( *(uint16_t*)buf == 0xFFFE) {
+                else if( *(uint16_t*)tmp_buf == 0xFFFE) {
                     // UTF16_REV
-                    *(uint16_t*)buf = *(uint16_t*)(buf+2);
-                    buf_len = (buf_len > 2) ? buf_len - 2 : 0;
+                    *(uint16_t*)tmp_buf = *(uint16_t*)(tmp_buf+2);
+                    tmp_buf_len = (tmp_buf_len > 2) ? tmp_buf_len - 2 : 0;
                     _cv = &cvUTF16REV;
                 }
             default:
                 ;
         }
-        if( buf_len) {
-            const uint8_t *pbuf = buf;
-            while( pbuf < buf+buf_len) {
+        if( tmp_buf_len) {
+            const uint8_t *pbuf = tmp_buf;
+            while( pbuf < tmp_buf+tmp_buf_len) {
                 uint32_t wc;
-                r = _cv->read( &wc, &pbuf, buf+buf_len);
+                r = _cv->read( &wc, &pbuf, tmp_buf+tmp_buf_len);
                 if( r == CV_ILSEQ) {
                     if( _bad_char) {
                         wc = _bad_char;
+                        _errors++;
                     }
                     else
                         break;
                 }
                 else if( r < 0) {
-                    r = sqstd_sread( buf+buf_len, 1, _stream);
+                    r = sqstd_sread( tmp_buf+tmp_buf_len, 1, _stream);
                     if( r == 1) {
-                        buf_len++;
+                        tmp_buf_len++;
                         continue;
                     }
                 }
-                r = append_wchar( wc);
+                _wc_buf[_wc_buf_len++] = wc;
             }
         }
         return r;
@@ -1281,36 +1341,43 @@ struct SQTextReader
 
     int ReadCodepoint( uint32_t *pwc)
     {
-        uint8_t tmp[8];
-        const uint8_t *rdbuf = tmp;
-        size_t rdbuf_len = 0;
-        uint32_t wc;
-        int r;
+        if( _wc_buf_pos < _wc_buf_len) {
+            *pwc = _wc_buf[_wc_buf_pos++];
+            return CV_OK;
+        }
+        else {
+            uint8_t tmp[8];
+            const uint8_t *rdbuf = tmp;
+            size_t rdbuf_len = 0;
+            uint32_t wc;
+            int r;
 
-        int step = _cv->min_char_size;
-        while(1) {
-            r = sqstd_sread( tmp+rdbuf_len, step, _stream);
-            if( r == step) {
-                rdbuf_len += step;
-                r = _cv->read( &wc, &rdbuf, tmp+rdbuf_len);
-                if( (r == CV_OK) && (r == CV_ILSEQ)) {
-                    break;
+            int step = _cv->min_char_size;
+            while(1) {
+                r = sqstd_sread( tmp+rdbuf_len, step, _stream);
+                if( r == step) {
+                    rdbuf_len += step;
+                    r = _cv->read( &wc, &rdbuf, tmp+rdbuf_len);
+                    if( (r == CV_OK) || (r == CV_ILSEQ)) {
+                        break;
+                    }
+                    else {
+                        step = -r;
+                    }
                 }
                 else {
-                    step = -r;
+                    r = -1; // EOF
+                    break;
                 }
             }
-            else {
-                r = -1; // EOF
-                break;
+            if( (r == CV_ILSEQ) && (_bad_char != 0)) {
+                wc = _bad_char;
+                _errors++;
+                r = CV_OK;
             }
+            *pwc = wc;
+            return r;
         }
-        if( (r == CV_ILSEQ) && (_bad_char != 0)) {
-            wc = _bad_char;
-            r = CV_OK;
-        }
-        *pwc = wc;
-        return r;
     }
 
     int append_wchar( uint32_t wc)
@@ -1320,6 +1387,7 @@ struct SQTextReader
         r = cvSQChar().write( wc, &tmp, (uint8_t*)(_buf + CBUFF_SIZE));
         if( (r == CV_ILUNI)  && (_bad_char != 0)) {
             wc = _bad_char;
+            _errors++;
             r = cvSQChar().write( wc, &tmp, (uint8_t*)(_buf + CBUFF_SIZE));
         }
         if( r == CV_OK) {
@@ -1382,21 +1450,74 @@ struct SQTextReader
                 break;
             buff++;
         }
-        if( (r == CV_OK) && (*buff != _SC('\n'))) {
-            r = 1;
-        }
+        //if( (r == CV_OK) && (*buff != _SC('\n'))) {
+        //    r = 1;
+        //}
         *pbuff = buff;
         return r;
     }
 
     SQStream *_stream;
     const cv_t *_cv;
-//	cvReadFct *_read;
+    uint32_t _bad_char;
+
 	size_t _buf_len;
 	size_t _buf_pos;
-    uint32_t _bad_char;
 	SQChar _buf[CBUFF_SIZE];
+    size_t _wc_buf_pos;
+    size_t _wc_buf_len;
+    uint32_t _wc_buf[CBUFF_SIZE];
+    int _errors;
 };
+
+SQSTDTEXTRD sqstd_text_reader( SQSTREAM stream, int encoding, SQBool read_bom, const SQChar *bad_char)
+{
+    const cv_t *cv = cv_by_id( encoding);
+    if( cv == NULL) return NULL;
+	SQTextReader *rd = new (sq_malloc(sizeof(SQTextReader)))SQTextReader( (SQStream*)stream, cv);
+	if( bad_char) {
+        rd->SetBadChar( bad_char, -1);
+	}
+	if( read_bom) {
+        rd->ReadBOM();
+    }
+    return (SQSTDTEXTRD)rd;
+}
+
+void sqstd_text_releasereader( SQSTDTEXTRD reader)
+{
+    SQTextReader *rd = (SQTextReader*)reader;
+    rd->~SQTextReader();
+    sq_free(rd,sizeof(SQTextReader));
+}
+
+SQInteger sqstd_text_readcodepoint( SQSTDTEXTRD reader, SQInteger *pwc)
+{
+    SQTextReader *rd = (SQTextReader*)reader;
+    uint32_t wc;
+    int r = rd->ReadCodepoint( &wc);
+    *pwc = wc;
+    return r;
+}
+
+SQInteger sqstd_text_peekchar( SQSTDTEXTRD reader, SQChar *pc)
+{
+    SQTextReader *rd = (SQTextReader*)reader;
+    return rd->PeekChar( pc);
+}
+
+SQInteger sqstd_text_readchar( SQSTDTEXTRD reader, SQChar *pc)
+{
+    SQTextReader *rd = (SQTextReader*)reader;
+    return rd->ReadChar( pc);
+}
+
+SQInteger sqstd_text_readline( SQSTDTEXTRD reader, SQChar **pbuff, SQChar * const buff_end)
+{
+    SQTextReader *rd = (SQTextReader*)reader;
+    SQInteger r = rd->ReadLine( pbuff, buff_end);
+    return r == CV_OK ? SQ_OK : SQ_ERROR;
+}
 
 /* ====================================
 		Text Writer
@@ -1404,20 +1525,16 @@ struct SQTextReader
 
 struct SQTextWriter
 {
-    SQTextWriter( SQStream *stream, const cv_t *cv) : _stream(stream), _cv(cv), _buf_len(0), _bad_char(0)
+    SQTextWriter( SQStream *stream, const cv_t *cv) : _stream(stream), _cv(cv), _buf_len(0), _bad_char(0), _errors(0)
     {
     }
 
     int SetBadChar( const SQChar *str, SQInteger len)
     {
-        if( str != 0) {
-            return cvCheckChar( str, len, _cv->write, &_bad_char);
-        }
-        else {
-            _bad_char = 0;
-            return CV_OK;
-        }
+        return cvCheckBadChar( str, len, *_cv, &_bad_char);
     }
+
+    int ClearErrors( void) { int r = _errors; _errors = 0; return r; }
 
     int WriteCodepoint( uint32_t wc)
     {
@@ -1428,6 +1545,7 @@ struct SQTextWriter
         r = _cv->write( wc, &wrbuf, tmp + sizeof(tmp));
         if( (r == CV_ILUNI) && (_bad_char != 0)) {
             wrbuf = tmp;
+            _errors++;
             r = _cv->write( _bad_char, &wrbuf, tmp + sizeof(tmp));
         }
         if( r == CV_OK) {
@@ -1449,6 +1567,7 @@ struct SQTextWriter
         r = cvSQChar().read( &wc, &rdbuf, (uint8_t*)(_buf + _buf_len));
         if( (r == CV_ILSEQ) && (_bad_char != 0)) {
             r = CV_OK;
+            _errors++;
             wc = _bad_char;
         }
         if( (r != CV_ILSEQ) && (r < 0) ) {
@@ -1476,6 +1595,7 @@ struct SQTextWriter
             r = cvSQChar().read( &wc, &rdbuf, (const uint8_t*)(str + str_len));
             if( (r == CV_ILSEQ) && (_bad_char != 0)) {
                 r = CV_OK;
+                _errors++;
                 wc = _bad_char;
             }
             if( r == CV_OK) {
@@ -1492,69 +1612,50 @@ struct SQTextWriter
 	size_t _buf_len;
     uint32_t _bad_char;
 	SQChar _buf[CBUFF_SIZE];
+	int _errors;
 };
 
-/* ====================================
-		Test
-==================================== */
-/*
-static SQInteger test_sqstd_SQChar_to_UTF8( void)
+typedef void *SQSTDTEXTWR;
+
+SQSTDTEXTWR sqstd_text_writer( SQSTREAM stream, int encoding, SQBool write_bom, const SQChar *bad_char)
 {
-    const SQChar *str_in = _SC("Hellou");
-    SQInteger r;
-    const uint8_t *out;
-    SQUnsignedInteger out_alloc;
-    SQInteger out_size;
-
-    // return same string
-    r = sqstd_SQChar_to_UTF8( str_in, -1, &out, &out_alloc, &out_size);
-    sqstd_textrelease( out, out_alloc);
-    if( (const void*)out != (const void*)str_in) {
-        printf( "NOK\n");
-    }
-
-    // return same string
-    r = sqstd_SQChar_to_UTF8( str_in, 6, &out, &out_alloc, &out_size);
-    sqstd_textrelease( out, out_alloc);
-    if( (const void*)out != (const void*)str_in) {
-        printf( "NOK\n");
-    }
-
-    // return copy
-    r = sqstd_SQChar_to_UTF8( str_in, 3, &out, &out_alloc, &out_size);
-    sqstd_textrelease( out, out_alloc);
-    if( (const void*)out == (const void*)str_in) {
-        printf( "NOK\n");
-    }
-
-    return r;
+    const cv_t *cv = cv_by_id( encoding);
+    if( cv == NULL) return NULL;
+	SQTextWriter *wr = new (sq_malloc(sizeof(SQTextWriter)))SQTextWriter( (SQStream*)stream, cv);
+	if( bad_char) {
+        wr->SetBadChar( bad_char, -1);
+	}
+	if( write_bom && (encoding != SQTEXTENC_ASCII)) {
+        wr->WriteCodepoint( BOM_CODEPOINT);
+	}
+    return (SQSTDTEXTWR)wr;
 }
 
-static SQInteger test_sqstd_SQChar_to_UTF16( void)
+void sqstd_text_releasewriter( SQSTDTEXTWR writer)
 {
-    const SQChar *str_in = _SC("Hellou");
-    SQInteger r;
-    const uint16_t *out;
-    SQUnsignedInteger out_alloc;
-    SQInteger out_size;
-
-    // return converted string
-    r = sqstd_SQChar_to_UTF16( str_in, -1, &out, &out_alloc, &out_size);
-    sqstd_textrelease( out, out_alloc);
-    if( (const void*)out == (const void*)str_in) {
-        printf( "NOK\n");
-    }
-
-    // return converted string
-    r = sqstd_SQChar_to_UTF16( str_in, 3, &out, &out_alloc, &out_size);
-    sqstd_textrelease( out, out_alloc);
-    if( (const void*)out == (const void*)str_in) {
-        printf( "NOK\n");
-    }
-
-    return r;
+    SQTextWriter *wr = (SQTextWriter*)writer;
+    wr->~SQTextWriter();
+    sq_free(wr,sizeof(SQTextWriter));
 }
-*/
+
+SQInteger sqstd_text_writecodepoint( SQSTDTEXTWR writer, SQInteger wc)
+{
+    SQTextWriter *wr = (SQTextWriter*)writer;
+    return wr->WriteCodepoint( wc);
+}
+
+SQInteger sqstd_text_writechar( SQSTDTEXTWR writer, SQChar c)
+{
+    SQTextWriter *wr = (SQTextWriter*)writer;
+    return wr->WriteChar( c);
+}
+
+SQInteger sqstd_text_writestring( SQSTDTEXTWR writer, const SQChar *str, SQInteger len)
+{
+    SQTextWriter *wr = (SQTextWriter*)writer;
+    return wr->WriteString( str, len);
+}
+
 /* ====================================
 ==================================== */
 
@@ -1602,13 +1703,13 @@ static SQInteger test_sqstd_SQChar_to_UTF16( void)
 
 */
 
-
 static SQRESULT _textrw_blobtostr(HSQUIRRELVM v)
 {
     SQUserPointer ptr;
     SQInteger size;
     const SQChar *enc;
     int enc_id;
+    SQBool is_strict = SQFalse;
     if( SQ_FAILED(sqstd_getblob(v,2,&ptr))) return SQ_ERROR;
     size = sqstd_getblobsize(v,2);
     sq_getstring(v,3,&enc);
@@ -1616,7 +1717,13 @@ static SQRESULT _textrw_blobtostr(HSQUIRRELVM v)
     if( enc_id < 0) {
         return sq_throwerror(v,_SC("Unknown encoding name"));
     }
-    sqstd_push_UTF(v,enc_id,ptr,size);
+    if( sq_gettop(v) > 3) {
+        sq_getbool(v,4,&is_strict);
+    }
+    SQInteger r = sqstd_push_UTF(v,enc_id,ptr,size);
+    if( is_strict && r) {
+        return sq_throwerror(v,_SC("Text conversion failed"));
+    }
     return 1;
 }
 
@@ -1627,26 +1734,328 @@ static SQRESULT _textrw_strtoblob(HSQUIRRELVM v)
     const void *out;
     SQUnsignedInteger out_alloc;
     SQInteger out_size;
-    SQUserPointer blob;
+    SQBool is_strict = SQFalse;
     sq_getstring(v,3,&enc);
     enc_id = sqstd_textencbyname( enc);
     if( enc_id < 0) {
         return sq_throwerror(v,_SC("Unknown encoding name"));
     }
-    if(SQ_FAILED(sqstd_get_UTF(v,2,enc_id,&out,&out_alloc,&out_size))) return SQ_ERROR;
-    blob = sqstd_createblob(v,out_size);
-    memcpy(blob,out,out_size);
-    sqstd_textrelease(out,out_alloc);
-    return 1;
+    if( sq_gettop(v) > 3) {
+        sq_getbool(v,4,&is_strict);
+    }
+    SQInteger r = sqstd_get_UTF(v,2,enc_id,&out,&out_alloc,&out_size);
+    if( is_strict && r) {
+        sqstd_textrelease(out,out_alloc);
+        return sq_throwerror(v,_SC("Text conversion failed"));
+    }
+    else {
+        SQUserPointer blob = sqstd_createblob(v,out_size);
+        memcpy(blob,out,out_size);
+        sqstd_textrelease(out,out_alloc);
+        return 1;
+    }
 }
 
 #define _DECL_TEXTRW_FUNC(name,nparams,typecheck) {_SC(#name),_textrw_##name,nparams,typecheck}
 static const SQRegFunction _textrw_globals[]={
-    _DECL_TEXTRW_FUNC(blobtostr,3,_SC(".xs")),
-    _DECL_TEXTRW_FUNC(strtoblob,3,_SC(".ss")),
+    _DECL_TEXTRW_FUNC(blobtostr,-3,_SC(".xsb")),
+    _DECL_TEXTRW_FUNC(strtoblob,-3,_SC(".ssb")),
     {NULL,(SQFUNCTION)0,0,NULL}
 };
 
+/* ====================================
+	Text reader
+==================================== */
+
+static HSQMEMBERHANDLE textrd__stream_handle;
+
+static SQInteger _textrd_releasehook( SQUserPointer p, SQInteger SQ_UNUSED_ARG(size))
+{
+    SQSTDTEXTRD rdr = (SQSTDTEXTRD)p;
+    sqstd_text_releasereader(rdr);
+    return 1;
+}
+
+static SQInteger _textrd_constructor(HSQUIRRELVM v)
+{
+	SQSTREAM stream;
+	const SQChar *encoding;
+	SQInteger enc_id;
+    SQBool read_bom = SQFalse;
+    const SQChar *bad_char = 0;
+
+    if( SQ_FAILED( sq_getinstanceup( v,2,(SQUserPointer*)&stream,SQSTD_STREAM_TYPE_TAG))) {
+        return sq_throwerror(v,_SC("argument is not a stream"));
+	}
+    sq_getstring(v, 3, &encoding);
+    SQInteger top = sq_gettop(v);
+    if( top > 3) {
+        sq_getbool(v, 4, &read_bom);
+        if( top > 4) {
+            sq_getstring(v, 5, &bad_char);
+        }
+    }
+
+    enc_id = sqstd_textencbyname( encoding);
+    if( enc_id == -1) {
+        return sq_throwerror(v,_SC("unknown encoding"));
+    }
+
+    SQSTDTEXTRD rdr = sqstd_text_reader( stream, enc_id, read_bom, bad_char);
+    if( rdr) {
+        if(SQ_FAILED(sq_setinstanceup(v,1,rdr))) {
+            sqstd_text_releasereader(rdr);
+            return sq_throwerror(v, _SC("cannot create text reader instance"));
+        }
+
+        sq_setreleasehook(v,1,_textrd_releasehook);
+
+        // save stream in _stream member
+        sq_push(v,2);
+        sq_setbyhandle(v,1,&textrd__stream_handle);
+
+        return 0;
+    }
+    else {
+        return sq_throwerror(v, _SC("failed to create text reader"));
+    }
+}
+
+#define SETUP_TEXTRD(v) \
+    SQSTDTEXTRD rdr = NULL; \
+    if(SQ_FAILED(sq_getinstanceup(v,1,(SQUserPointer*)&rdr,SQSTD_TEXTRD_TYPE_TAG))) \
+        return sq_throwerror(v,_SC("invalid type tag"));
+
+static SQInteger _textrd_readcodepoint(HSQUIRRELVM v)
+{
+    SQInteger r;
+    SQInteger wc;
+    SETUP_TEXTRD(v)
+    r = sqstd_text_readcodepoint( rdr, &wc);
+    if( r == SQ_OK) {
+        sq_pushinteger(v, wc);
+    }
+    else {
+        sq_pushnull(v);
+    }
+    return 1;
+}
+
+static SQInteger _textrd_peekchar(HSQUIRRELVM v)
+{
+    SQInteger r;
+    SQChar c;
+    SETUP_TEXTRD(v)
+    r = sqstd_text_peekchar( rdr, &c);
+    if( r == SQ_OK) {
+        sq_pushstring(v, &c, 1);
+    }
+    else {
+        sq_pushnull(v);
+    }
+    return 1;
+}
+
+static SQInteger _textrd_readchar(HSQUIRRELVM v)
+{
+    SQInteger r;
+    SQChar c;
+    SETUP_TEXTRD(v)
+    r = sqstd_text_readchar( rdr, &c);
+    if( r == SQ_OK) {
+        sq_pushstring(v, &c, 1);
+    }
+    else {
+        sq_pushnull(v);
+    }
+    return 1;
+}
+
+#define READLINE_DEFAULT_MAX    8192
+#define READLINE_STEP_SIZE      256
+
+static SQInteger _textrd_readline(HSQUIRRELVM v)
+{
+    SQInteger max_len = READLINE_DEFAULT_MAX;
+    SQInteger len = 0;
+    SQInteger allocated = 0;
+    SQChar *buff;
+    SETUP_TEXTRD(v)
+    if(sq_gettop(v) > 1) {
+        sq_getinteger(v,2,&max_len);
+        if( max_len < 0) max_len = (1U << (8*sizeof(SQInteger)-1)) - 1U;
+    }
+    do {
+        if( allocated >= max_len) break;
+        allocated+=READLINE_STEP_SIZE;
+        if( allocated > max_len) allocated = max_len;
+        buff = sq_getscratchpad(v,allocated);
+        SQChar *end = buff + len;
+        sqstd_text_readline( rdr, &end, buff + allocated);
+        len = end - buff;
+    } while( len < allocated);
+    if( len) {
+        sq_pushstring(v, buff, len);
+    }
+    else {
+        sq_pushnull(v);
+    }
+    return 1;
+}
+
+static SQInteger _textrd__typeof(HSQUIRRELVM v);
+
+#define _DECL_TEXTRD_FUNC(name,nparams,typecheck) {_SC(#name),_textrd_##name,nparams,typecheck}
+static const SQRegFunction _textrd_methods[]={
+    _DECL_TEXTRD_FUNC(constructor,-3,_SC("xxsbs")),
+    _DECL_TEXTRD_FUNC(readcodepoint,1,_SC("x")),
+    _DECL_TEXTRD_FUNC(peekchar,1,_SC("x")),
+    _DECL_TEXTRD_FUNC(readchar,1,_SC("x")),
+    _DECL_TEXTRD_FUNC(readline,-2,_SC("xi")),
+    _DECL_TEXTRD_FUNC(_typeof,1,_SC("x")),
+    {NULL,(SQFUNCTION)0,0,NULL}
+};
+
+static const SQRegMember _textrd_members[] = {
+	{_SC("_stream"), &textrd__stream_handle },
+	{NULL,NULL}
+};
+
+SQUserPointer _sqstd_textrd_type_tag(void)
+{
+    return (SQUserPointer)_sqstd_textrd_type_tag;
+}
+
+static const SQRegClass _sqstd_textrd_decl = {
+    _SC("reader"),		// name
+	_textrd_members,	// members
+	_textrd_methods,	// methods
+};
+
+static SQInteger _textrd__typeof(HSQUIRRELVM v)
+{
+    sq_pushstring(v,_sqstd_textrd_decl.name,-1);
+    return 1;
+}
+
+/* ====================================
+	Text writer
+==================================== */
+
+static HSQMEMBERHANDLE textwr__stream_handle;
+
+static SQInteger _textwr_releasehook( SQUserPointer p, SQInteger SQ_UNUSED_ARG(size))
+{
+    SQSTDTEXTWR wrt = (SQSTDTEXTWR)p;
+    sqstd_text_releasewriter(wrt);
+    return 1;
+}
+
+static SQInteger _textwr_constructor(HSQUIRRELVM v)
+{
+	SQSTREAM stream;
+	const SQChar *encoding;
+	SQInteger enc_id;
+    SQBool write_bom = SQFalse;
+    const SQChar *bad_char = 0;
+
+    if( SQ_FAILED( sq_getinstanceup( v,2,(SQUserPointer*)&stream,SQSTD_STREAM_TYPE_TAG))) {
+        return sq_throwerror(v,_SC("argument is not a stream"));
+	}
+    sq_getstring(v, 3, &encoding);
+    SQInteger top = sq_gettop(v);
+    if( sq_gettop(v) > 3) {
+        sq_getbool(v, 4, &write_bom);
+        if( top > 4) {
+            sq_getstring(v, 5, &bad_char);
+        }
+    }
+
+    enc_id = sqstd_textencbyname( encoding);
+    if( enc_id == -1) {
+        return sq_throwerror(v,_SC("unknown encoding"));
+    }
+
+    SQSTDTEXTWR wrt = sqstd_text_writer( stream, enc_id, write_bom, 0);
+    if( wrt) {
+        if(SQ_FAILED(sq_setinstanceup(v,1,wrt))) {
+            sqstd_text_releasewriter(wrt);
+            return sq_throwerror(v, _SC("cannot create text writer instance"));
+        }
+
+        sq_setreleasehook(v,1,_textwr_releasehook);
+
+        // save stream in _stream member
+        sq_push(v,2);
+        sq_setbyhandle(v,1,&textwr__stream_handle);
+
+        return 0;
+    }
+    else {
+        return sq_throwerror(v, _SC("failed to create text writer"));
+    }
+}
+
+#define SETUP_TEXTWR(v) \
+    SQSTDTEXTWR wrt = NULL; \
+    if(SQ_FAILED(sq_getinstanceup(v,1,(SQUserPointer*)&wrt,SQSTD_TEXTWR_TYPE_TAG))) \
+        return sq_throwerror(v,_SC("invalid type tag"));
+
+static SQInteger _textwr_writecodepoint(HSQUIRRELVM v)
+{
+    SQInteger r;
+    SQInteger wc;
+    SETUP_TEXTWR(v)
+    sq_getinteger(v, 2, &wc);
+    r = sqstd_text_writecodepoint( wrt, wc);
+    sq_pushinteger(v,r);
+    return 1;
+}
+
+static SQInteger _textwr_print(HSQUIRRELVM v)
+{
+    SQInteger r;
+    const SQChar *str;
+    SQInteger len;
+    SETUP_TEXTWR(v)
+    sq_getstringandsize(v,2,&str,&len);
+    r = sqstd_text_writestring( wrt, str, len);
+    sq_pushinteger(v,r);
+    return 1;
+}
+
+static SQInteger _textwr__typeof(HSQUIRRELVM v);
+
+#define _DECL_TEXTWR_FUNC(name,nparams,typecheck) {_SC(#name),_textwr_##name,nparams,typecheck}
+static const SQRegFunction _textwr_methods[]={
+    _DECL_TEXTWR_FUNC(constructor,-3,_SC("xxsbs")),
+    _DECL_TEXTWR_FUNC(writecodepoint,2,_SC("xi")),
+    _DECL_TEXTWR_FUNC(print,2,_SC("xs")),
+    _DECL_TEXTWR_FUNC(_typeof,1,_SC("x")),
+    {NULL,(SQFUNCTION)0,0,NULL}
+};
+
+static const SQRegMember _textwr_members[] = {
+	{_SC("_stream"), &textwr__stream_handle },
+	{NULL,NULL}
+};
+
+SQUserPointer _sqstd_textwr_type_tag(void)
+{
+    return (SQUserPointer)_sqstd_textwr_type_tag;
+}
+
+static const SQRegClass _sqstd_textwr_decl = {
+    _SC("writer"),		// name
+	_textwr_members,	// members
+	_textwr_methods,	// methods
+};
+
+static SQInteger _textwr__typeof(HSQUIRRELVM v)
+{
+    sq_pushstring(v,_sqstd_textwr_decl.name,-1);
+    return 1;
+}
 
 /* ====================================
 		Register
@@ -1656,27 +2065,22 @@ extern "C" {
 }
 SQInteger SQPACKAGE_LOADFCT(HSQUIRRELVM v)
 {
-    //test_sqstd_SQChar_to_UTF8();
-    //test_sqstd_SQChar_to_UTF16();
-
     sq_newtable(v);
+
+	if(SQ_FAILED(sqstd_registerclass(v,SQSTD_TEXTRD_TYPE_TAG,&_sqstd_textrd_decl,0))) {
+		return SQ_ERROR;
+	}
+	sq_poptop(v);
+
+	if(SQ_FAILED(sqstd_registerclass(v,SQSTD_TEXTWR_TYPE_TAG,&_sqstd_textwr_decl,0))) {
+		return SQ_ERROR;
+	}
+	sq_poptop(v);
 
     if(SQ_FAILED(sqstd_registerfunctions(v,_textrw_globals))) {
         return SQ_ERROR;
     }
-/*
-	if(SQ_FAILED(sqstd_registerclass(v,SQSTD_TEXTREADER_TYPE_TAG,&_sqstd_textreader_decl,SQSTD_STREAM_TYPE_TAG)))
-	{
-		return SQ_ERROR;
-	}
- 	sq_poptop(v);
 
-	if(SQ_FAILED(sqstd_registerclass(v,SQSTD_TEXTWRITER_TYPE_TAG,&_sqstd_textwriter_decl,SQSTD_STREAM_TYPE_TAG)))
-	{
-		return SQ_ERROR;
-	}
- 	sq_poptop(v);
-*/
 	return 1;
 }
 /*
