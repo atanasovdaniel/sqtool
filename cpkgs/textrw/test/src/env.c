@@ -40,7 +40,7 @@ void *sq_realloc( void* p, SQUnsignedInteger oldsize,SQUnsignedInteger newsize)
     {
         printf( "REALLOC:%p:%u, %p:%u\n", r, newsize, p, oldsize);
     }
-    return realloc( p, newsize);
+    return r;
 }
 
 void sq_free(void *p, SQ_UNUSED_ARG(SQUnsignedInteger size))

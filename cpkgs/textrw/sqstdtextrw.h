@@ -17,6 +17,8 @@ extern "C" {
 
 SQUIRREL_API SQInteger sqstd_textencbyname( const SQChar *name);
 SQUIRREL_API SQInteger sqstd_textdefaultenc( void);
+SQUIRREL_API SQInteger sqstd_textnativeenc( SQInteger enc);
+
 SQUIRREL_API const SQChar* sqstd_textdefaultencname( void);
 
 SQUIRREL_API SQInteger sqstd_UTF_to_SQChar( int encoding, const void *inbuf, SQInteger inbuf_size,
