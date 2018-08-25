@@ -31,7 +31,7 @@ THE SOFTWARE.
 #include <sqstdio.h>
 #include <sqstdstreamio.h>
 #include <sqstdblob.h>
-#include "sqstdtextrw.h"
+#include "sqstdtext.h"
 
 #define DEFAULT_BAD_CHAR_ASCII  '?'
 #define DEFAULT_BAD_CHAR        0xFFFD
@@ -136,49 +136,45 @@ static const uint32_t utf8_min_codept[5] = {0,0,0x80,0x800,0x10000};
 static int cvReadUTF8( uint32_t *pwc, const uint8_t **pbuf, const uint8_t* const buf_end)
 {
     const uint8_t *buf = *pbuf;
-    while(1) {
-        uint8_t c;
-        if( buf == buf_end) { *pbuf = buf; return -1; }
-        c = *buf;
-        if( c < 0x80) { *pbuf = buf+1; *pwc = c; return CV_OK; }
-        else if( (c < 0xC2) || (c > 0xF4)) { *pbuf = buf+1; return CV_ILSEQ; }
-        else {
-            SQInteger codelen = utf8_lengths[ (c >> 4) - 8];
-            if( !codelen) { *pbuf = buf+1; return CV_ILSEQ; }
-            if( (buf_end - buf) < codelen) {
-                *pbuf = buf;
-                int need =  (buf_end - buf) - codelen;
-                while( ++buf < buf_end) {
-                    if( (*buf & 0xC0) != 0x80) {
-                        *pbuf = buf;
-                        return CV_ILSEQ;
-                    }
+    uint8_t c;
+    if( buf == buf_end) { *pbuf = buf; return -1; }
+    c = *buf;
+    if( c < 0x80) { *pbuf = buf+1; *pwc = c; return CV_OK; }
+    else if( (c < 0xC2) || (c > 0xF4)) { *pbuf = buf+1; return CV_ILSEQ; }
+    else {
+        SQInteger codelen = utf8_lengths[ (c >> 4) - 8];
+        if( !codelen) { *pbuf = buf+1; return CV_ILSEQ; }
+        if( (buf_end - buf) < codelen) {
+            *pbuf = buf;
+            int need =  (buf_end - buf) - codelen;
+            while( ++buf < buf_end) {
+                if( (*buf & 0xC0) != 0x80) {
+                    *pbuf = buf;
+                    return CV_ILSEQ;
                 }
-                return need; // need more bytes
             }
-            SQInteger n = codelen;
-            buf++;
-            uint32_t wc = c & utf8_byte_masks[codelen];
-            while( --n) {
-                c = *buf;
-                if( (c & 0xC0) != 0x80) { *pbuf = buf; return CV_ILSEQ; }
-                buf++;
-                wc <<= 6; wc |= c & 0x3F;
-            }
-            if( wc < utf8_min_codept[codelen]) { *pbuf = buf; return CV_ILSEQ; }
-            if( wc != BOM_CODEPOINT) {
-                *pbuf = buf;
-                *pwc = wc;
-                return CV_OK;
-            }
+            return need; // need more bytes
         }
+        SQInteger n = codelen;
+        buf++;
+        uint32_t wc = c & utf8_byte_masks[codelen];
+        while( --n) {
+            c = *buf;
+            if( (c & 0xC0) != 0x80) { *pbuf = buf; return CV_ILSEQ; }
+            buf++;
+            wc <<= 6; wc |= c & 0x3F;
+        }
+        if( wc < utf8_min_codept[codelen]) { *pbuf = buf; return CV_ILSEQ; }
+        *pbuf = buf;
+        *pwc = wc;
+        return CV_OK;
     }
 }
 
 static int cvWriteUTF8( uint32_t wc, uint8_t **pbuf, const uint8_t* const buf_end)
 {
     uint8_t *buf = *pbuf;
-    if( wc < 0xD800 || (wc >= 0xE000 && wc != 0xFFFE && wc < 0x110000)) {
+    if( wc < 0xD800 || (wc >= 0xE000 && wc < 0x110000)) {
         int codelen;
 
         if( wc <= 0x007F)			{ codelen = 1; }
@@ -213,53 +209,73 @@ static size_t cvStrSizeUTF8( const uint8_t *str)
     UTF-16
 ================ */
 
-static int cvReadUTF16( uint32_t *pwc, const uint8_t **pbuf, const uint8_t* const buf_end)
+static uint16_t CV_SWAP_U16( const uint16_t val)
 {
-    const uint8_t *buf = *pbuf;
-    while(1) {
-        uint16_t c;
-        if( (buf_end-buf) < (int)sizeof(uint16_t)) { *pbuf = buf; return -(sizeof(uint16_t) - (buf_end-buf)); }
-        c = *(const uint16_t*)buf;
-        if( c == BOM_CODEPOINT)		{ buf += sizeof(uint16_t); }
-        else if( c >= 0xD800 && c < 0xDC00) {
-            uint32_t wc = c;
-            if( (buf_end-buf) < 2*(int)sizeof(uint16_t)) { *pbuf = buf; return -(2*sizeof(uint16_t) - (buf_end-buf)); }
-            buf += sizeof(uint16_t);
-            c = *(const uint16_t*)buf;
-            buf += sizeof(uint16_t);
-            if( c >= 0xDC00 && c < 0xE000) {
-                wc = 0x10000 + ((wc - 0xD800) << 10) + (c - 0xDC00);
-                *pbuf = buf;
-                *pwc = wc;
-                return CV_OK;
-            }
-            else { *pbuf = buf; return CV_ILSEQ; }
-        }
-        else if( (c >= 0xDC00 && c < 0xE000) || (c == 0xFFFE)) { *pbuf = buf+sizeof(uint16_t); return CV_ILSEQ; }
-        else { *pbuf = buf+sizeof(uint16_t); *pwc = c; return SQ_OK; }
-    }
+    return ((val & 0xFF) << 8) |
+            ((val >> 8) & 0xFF);
 }
 
-static int cvWriteUTF16( uint32_t wc, uint8_t **pbuf, const uint8_t* const buf_end)
+static int cvReadUTF16_any( uint32_t *pwc, const uint8_t **pbuf, const uint8_t* const buf_end, const bool is_rev)
+{
+    const uint8_t *buf = *pbuf;
+    uint16_t c;
+    if( (buf_end-buf) < (int)sizeof(uint16_t)) { *pbuf = buf; return -(sizeof(uint16_t) - (buf_end-buf)); }
+    c = *(const uint16_t*)buf;
+    if( is_rev) { c = CV_SWAP_U16(c); }
+    if( c >= 0xD800 && c < 0xDC00) {
+        uint32_t wc = c;
+        if( (buf_end-buf) < 2*(int)sizeof(uint16_t)) { *pbuf = buf; return -(2*sizeof(uint16_t) - (buf_end-buf)); }
+        buf += sizeof(uint16_t);
+        c = *(const uint16_t*)buf;
+        if( is_rev) { c = CV_SWAP_U16(c); }
+        if( c >= 0xDC00 && c < 0xE000) {
+            buf += sizeof(uint16_t);
+            wc = 0x10000 + ((wc - 0xD800) << 10) + (c - 0xDC00);
+            *pbuf = buf;
+            *pwc = wc;
+            return CV_OK;
+        }
+        else { *pbuf = buf; return CV_ILSEQ; }
+    }
+    else if( c >= 0xDC00 && c < 0xE000) { *pbuf = buf+sizeof(uint16_t); return CV_ILSEQ; }
+    else { *pbuf = buf+sizeof(uint16_t); *pwc = c; return SQ_OK; }
+}
+
+static int cvWriteUTF16_any( uint32_t wc, uint8_t **pbuf, const uint8_t* const buf_end, const bool is_rev)
 {
     uint8_t *buf = *pbuf;
-    if( wc < 0xD800 || (wc >= 0xE000 && wc != 0xFFFE && wc < 0x110000)) {
+    if( wc < 0xD800 || (wc >= 0xE000 && wc < 0x110000)) {
         if( wc >= 0x10000) {
             if( (buf_end - buf) < 2*(int)sizeof(uint16_t)) return 2*sizeof(uint16_t) - (buf_end - buf);
             wc -= 0x10000;
-            ((uint16_t*)buf)[0] = 0xD800 | ((wc >> 10) & 0x03FF);
-            ((uint16_t*)buf)[1] = 0xDC00 | (wc & 0x03FF);
+            uint16_t hs = 0xD800 | ((wc >> 10) & 0x03FF);
+            uint16_t ls = 0xDC00 | (wc & 0x03FF);
+            if( is_rev) { hs = CV_SWAP_U16(hs); ls = CV_SWAP_U16(ls); }
+            ((uint16_t*)buf)[0] = hs;
+            ((uint16_t*)buf)[1] = ls;
             *pbuf = buf + 2*sizeof(uint16_t);
             return CV_OK;
         }
         else {
             if( (buf_end - buf) < (int)sizeof(uint16_t)) return sizeof(uint16_t) - (buf_end - buf);
-            *(uint16_t*)buf = wc;
+            uint16_t c = (uint16_t)wc;
+            if( is_rev) { c = CV_SWAP_U16(c); }
+            *(uint16_t*)buf = c;
             *pbuf = buf + sizeof(uint16_t);
             return CV_OK;
         }
     }
     return CV_ILUNI;
+}
+
+static int cvReadUTF16( uint32_t *pwc, const uint8_t **pbuf, const uint8_t* const buf_end)
+{
+    return cvReadUTF16_any( pwc, pbuf, buf_end, false);
+}
+
+static int cvWriteUTF16( uint32_t wc, uint8_t **pbuf, const uint8_t* const buf_end)
+{
+    return cvWriteUTF16_any( wc, pbuf, buf_end, false);
 }
 
 static size_t cvStrSizeUTF16( const uint8_t *str)
@@ -273,101 +289,67 @@ static size_t cvStrSizeUTF16( const uint8_t *str)
     UTF-16 REV
 ================ */
 
-static uint16_t CV_SWAP_U16( const uint16_t val)
-{
-    return ((val & 0xFF) << 8) |
-            ((val >> 8) & 0xFF);
-}
-
 static int cvReadUTF16REV( uint32_t *pwc, const uint8_t **pbuf, const uint8_t* const buf_end)
 {
-    const uint8_t *buf = *pbuf;
-    while(1) {
-        uint16_t c;
-        if( (buf_end-buf) < (int)sizeof(uint16_t)) { *pbuf = buf; return -(sizeof(uint16_t) - (buf_end-buf)); }
-        c = *(const uint16_t*)buf;
-        c = CV_SWAP_U16(c);
-        if( c == BOM_CODEPOINT)		{ buf += sizeof(uint16_t); }
-        else if( c >= 0xD800 && c < 0xDC00) {
-            uint32_t wc = c;
-            if( (buf_end-buf) < 2*(int)sizeof(uint16_t)) { *pbuf = buf; return -(2*sizeof(uint16_t) - (buf_end-buf)); }
-            buf += sizeof(uint16_t);
-            c = *(const uint16_t*)buf;
-            c = CV_SWAP_U16( c);
-            buf += sizeof(uint16_t);
-            if( c >= 0xDC00 && c < 0xE000) {
-                wc = 0x10000 + ((wc - 0xD800) << 10) + (c - 0xDC00);
-                *pbuf = buf;
-                *pwc = wc;
-                return CV_OK;
-            }
-            else { *pbuf = buf; return CV_ILSEQ; }
-        }
-        else if( (c >= 0xDC00 && c < 0xE000) || (c == 0xFFFE)) { *pbuf = buf+sizeof(uint16_t); return CV_ILSEQ; }
-        else { *pbuf = buf+sizeof(uint16_t); *pwc = c; return SQ_OK; }
-    }
+    return cvReadUTF16_any( pwc, pbuf, buf_end, true);
 }
 
 static int cvWriteUTF16REV( uint32_t wc, uint8_t **pbuf, const uint8_t* const buf_end)
 {
-    uint8_t *buf = *pbuf;
-    if( wc < 0xD800 || (wc >= 0xE000 && wc != 0xFFFE && wc < 0x110000)) {
-        uint16_t c;
-        if( wc >= 0x10000) {
-            if( (buf_end - buf) < 2*(int)sizeof(uint16_t)) return 2*sizeof(uint16_t) - (buf_end - buf);
-            wc -= 0x10000;
-            c = 0xD800 | ((wc >> 10) & 0x03FF);
-            ((uint16_t*)buf)[0] = CV_SWAP_U16(c);
-            c = 0xDC00 | (wc & 0x03FF);
-            ((uint16_t*)buf)[1] = CV_SWAP_U16(c);
-            *pbuf = buf + 2*sizeof(uint16_t);
-            return CV_OK;
-        }
-        else {
-            if( (buf_end - buf) < (int)sizeof(uint16_t)) return sizeof(uint16_t) - (buf_end - buf);
-            c = (uint16_t)wc;
-            *(uint16_t*)buf = CV_SWAP_U16(c);
-            *pbuf = buf + sizeof(uint16_t);
-            return CV_OK;
-        }
-    }
-    return CV_ILUNI;
+    return cvWriteUTF16_any( wc, pbuf, buf_end, true);
 }
 
 /* ================
     UTF-32
 ================ */
 
-static int cvReadUTF32( uint32_t *pwc, const uint8_t **pbuf, const uint8_t* const buf_end)
+static uint32_t CV_SWAP_U32( const uint32_t val)
+{
+    return ((uint32_t)CV_SWAP_U16( val & 0xFFFF) << 16) |
+            CV_SWAP_U16( val >> 16);
+}
+
+static int cvReadUTF32_any( uint32_t *pwc, const uint8_t **pbuf, const uint8_t* const buf_end, const bool is_rev)
 {
     const uint8_t *buf = *pbuf;
-    while(1) {
-        uint32_t wc;
-        if( (buf_end-buf) < (int)sizeof(uint32_t)) { *pbuf = buf; return -(sizeof(uint32_t) - (buf_end-buf)); }
-        wc = *(const uint32_t*)buf;
-        buf += sizeof(uint32_t);
-        if( wc < 0xD800 || (wc >= 0xE000 && wc != 0xFFFE && wc < 0x110000)) {
-            *pbuf = buf;
-            *pwc = wc;
-            return CV_OK;
-        }
-        else {
-            *pbuf = buf;
-            return CV_ILSEQ;
-        }
+    uint32_t wc;
+    if( (buf_end-buf) < (int)sizeof(uint32_t)) { *pbuf = buf; return -(sizeof(uint32_t) - (buf_end-buf)); }
+    wc = *(const uint32_t*)buf;
+    if( is_rev) { wc = CV_SWAP_U32( wc); }
+    buf += sizeof(uint32_t);
+    if( wc < 0xD800 || (wc >= 0xE000 && wc < 0x110000)) {
+        *pbuf = buf;
+        *pwc = wc;
+        return CV_OK;
+    }
+    else {
+        *pbuf = buf;
+        return CV_ILSEQ;
     }
 }
 
-static int cvWriteUTF32( uint32_t wc, uint8_t **pbuf, const uint8_t* const buf_end)
+static int cvWriteUTF32_any( uint32_t wc, uint8_t **pbuf, const uint8_t* const buf_end, const bool is_rev)
 {
     uint8_t *buf = *pbuf;
-    if( wc < 0xD800 || (wc >= 0xE000 && wc != 0xFFFE && wc < 0x110000)) {
+    if( wc < 0xD800 || (wc >= 0xE000 && wc < 0x110000)) {
         if( (buf_end - buf) < (int)sizeof(uint32_t)) return sizeof(uint32_t) - (buf_end - buf);
+        if( is_rev) { wc = CV_SWAP_U32( wc); }
         *(uint32_t*)buf = wc;
         *pbuf = buf + sizeof(uint32_t);
         return CV_OK;
     }
     return CV_ILUNI;
+}
+
+
+static int cvReadUTF32( uint32_t *pwc, const uint8_t **pbuf, const uint8_t* const buf_end)
+{
+    return cvReadUTF32_any( pwc, pbuf, buf_end, false);
+}
+
+static int cvWriteUTF32( uint32_t wc, uint8_t **pbuf, const uint8_t* const buf_end)
+{
+    return cvWriteUTF32_any( wc, pbuf, buf_end, false);
 }
 
 static size_t cvStrSizeUTF32( const uint8_t *str)
@@ -381,44 +363,14 @@ static size_t cvStrSizeUTF32( const uint8_t *str)
     UTF-32 REV
 ================ */
 
-static uint32_t CV_SWAP_U32( const uint32_t val)
-{
-    return ((uint32_t)CV_SWAP_U16( val & 0xFFFF) << 16) |
-            CV_SWAP_U16( val >> 16);
-}
-
 static int cvReadUTF32REV( uint32_t *pwc, const uint8_t **pbuf, const uint8_t* const buf_end)
 {
-    const uint8_t *buf = *pbuf;
-    while(1) {
-        uint32_t wc;
-        if( (buf_end-buf) < (int)sizeof(uint32_t)) { *pbuf = buf; return -(sizeof(uint32_t) - (buf_end-buf)); }
-        wc = *(const uint32_t*)buf;
-        wc = CV_SWAP_U32( wc);
-        buf += sizeof(uint32_t);
-        if( wc < 0xD800 || (wc >= 0xE000 && wc != 0xFFFE && wc < 0x110000)) {
-            *pbuf = buf;
-            *pwc = wc;
-            return CV_OK;
-        }
-        else {
-            *pbuf = buf;
-            return CV_ILSEQ;
-        }
-    }
+    return cvReadUTF32_any( pwc, pbuf, buf_end, true);
 }
 
 static int cvWriteUTF32REV( uint32_t wc, uint8_t **pbuf, const uint8_t* const buf_end)
 {
-    uint8_t *buf = *pbuf;
-    if( wc < 0xD800 || (wc >= 0xE000 && wc != 0xFFFE && wc < 0x110000)) {
-        if( (buf_end - buf) < (int)sizeof(uint32_t)) return sizeof(uint32_t) - (buf_end - buf);
-        wc = CV_SWAP_U32( wc);
-        *(uint32_t*)buf = wc;
-        *pbuf = buf + sizeof(uint32_t);
-        return CV_OK;
-    }
-    return CV_ILUNI;
+    return cvWriteUTF32_any( wc, pbuf, buf_end, true);
 }
 
 /* ================
@@ -508,7 +460,7 @@ static int compare_encoding_name( const SQChar *iname, const SQChar *oname)
 	return i-o;
 }
 
-SQInteger sqstd_textencbyname( const SQChar *name)
+SQInteger sqstd_text_encbyname( const SQChar *name)
 {
     const struct enc_names *enc = encodings_list;
     while( enc->names) {
@@ -524,7 +476,24 @@ SQInteger sqstd_textencbyname( const SQChar *name)
     return -1;
 }
 
-SQInteger sqstd_textdefaultenc( void)
+const SQChar* sqstd_text_encname( SQInteger enc)
+{
+    const uint16_t tmp = 1;
+    switch( enc)
+    {
+        case SQTEXTENC_UTF8:    return __NAMES_UTF_8[0];
+        case SQTEXTENC_N_UTF16: return (*(const uint8_t*)&tmp == 1) ? __NAMES_UTF_16LE[0] : __NAMES_UTF_16BE[0];
+        case SQTEXTENC_UTF16BE: return __NAMES_UTF_16BE[0];
+        case SQTEXTENC_UTF16LE: return __NAMES_UTF_16LE[0];
+        case SQTEXTENC_N_UTF32: return (*(const uint8_t*)&tmp == 1) ? __NAMES_UTF_32LE[0] : __NAMES_UTF_32BE[0];
+        case SQTEXTENC_UTF32BE: return __NAMES_UTF_32BE[0];
+        case SQTEXTENC_UTF32LE: return __NAMES_UTF_32LE[0];
+        case SQTEXTENC_ASCII:   return __NAMES_ASCII[0];
+    }
+    return 0;
+}
+
+SQInteger sqstd_text_defaultenc( void)
 {
     const uint16_t tmp = 1;
     if( sizeof(SQChar) == sizeof(uint8_t))
@@ -548,7 +517,7 @@ SQInteger sqstd_textdefaultenc( void)
     }
 }
 
-SQInteger sqstd_textnativeenc( SQInteger enc)
+SQInteger sqstd_text_nativeenc( SQInteger enc)
 {
     const uint16_t tmp = 1;
     switch(enc)
@@ -566,44 +535,6 @@ SQInteger sqstd_textnativeenc( SQInteger enc)
     }
 }
 
-
-const SQChar* sqstd_textdefaultencname( void)
-{
-    switch(sqstd_textdefaultenc())
-    {
-        case SQTEXTENC_UTF8: return __NAMES_UTF_8[0];
-        case SQTEXTENC_UTF16BE: return __NAMES_UTF_16BE[0];
-        case SQTEXTENC_UTF16LE: return __NAMES_UTF_16LE[0];
-        case SQTEXTENC_UTF32BE: return __NAMES_UTF_32BE[0];
-        case SQTEXTENC_UTF32LE: return __NAMES_UTF_32LE[0];
-    }
-    return 0;
-}
-/*
-const SQChar* sqstd_textdefaultencname( void)
-{
-    const uint16_t tmp = 1;
-    if( sizeof(SQChar) == sizeof(uint8_t))
-        return __NAMES_UTF_8[0];
-    else if( sizeof(SQChar) == sizeof(uint16_t)) {
-        if( *(const uint8_t*)&tmp == 1) {
-            // localy little endian
-            return __NAMES_UTF_16LE[0];
-        }
-        else {
-            return __NAMES_UTF_16BE[0];
-        }
-    }
-    else if( sizeof(SQChar) == sizeof(uint32_t)) {
-        if( *(const uint8_t*)&tmp == 1) {
-            return __NAMES_UTF_32LE[0];;
-        }
-        else {
-            return __NAMES_UTF_32BE[0];;
-        }
-    }
-}
-*/
 static internal_encoding_t get_int_encoding( int encoding)
 {
     const uint16_t tmp = 1;
@@ -791,7 +722,7 @@ public:
     }
 };
 
-void sqstd_textrelease( const void *text, SQUnsignedInteger text_alloc_size)
+void sqstd_text_release( const void *text, SQUnsignedInteger text_alloc_size)
 {
     if( text_alloc_size != 0) {
         void *nctext = const_cast<void*>(text);
@@ -871,7 +802,7 @@ static SQInteger UTF_to_SQChar( const void *inbuf, SQInteger inbuf_size,
     return r;
 }
 
-SQInteger sqstd_UTF_to_SQChar( int encoding, const void *inbuf, SQInteger inbuf_size,
+SQInteger sqstd_text_fromutf( int encoding, const void *inbuf, SQInteger inbuf_size,
                  const SQChar **pstr, SQUnsignedInteger *palloc, SQInteger *plen)
 {
     if( inbuf) {
@@ -923,7 +854,7 @@ static SQInteger SQChar_to_UTF( const SQChar *str, SQInteger str_size, const voi
     return r;
 }
 
-SQInteger sqstd_SQChar_to_UTF( int encoding, const SQChar *str, SQInteger str_len,
+SQInteger sqstd_text_toutf( int encoding, const SQChar *str, SQInteger str_len,
                                 const void **pout, SQUnsignedInteger *pout_alloc, SQInteger *pout_size)
 {
     if( str) {
@@ -963,12 +894,12 @@ SQInteger sqstd_SQChar_to_UTF( int encoding, const SQChar *str, SQInteger str_le
 ==================================== */
 
 #ifndef TEST_WO_SQAPI
-SQInteger sqstd_get_UTF(HSQUIRRELVM v, SQInteger idx, int encoding, const void **pout, SQUnsignedInteger *pout_alloc, SQInteger *pout_size)
+SQInteger sqstd_text_get(HSQUIRRELVM v, SQInteger idx, int encoding, const void **pout, SQUnsignedInteger *pout_alloc, SQInteger *pout_size)
 {
     const SQChar *str;
     SQInteger str_len;
     sq_getstringandsize(v,idx,&str,&str_len);
-    sqstd_SQChar_to_UTF( encoding, str, str_len, pout, pout_alloc, pout_size);
+    sqstd_text_toutf( encoding, str, str_len, pout, pout_alloc, pout_size);
     return 0;
 }
 
@@ -977,9 +908,9 @@ SQInteger sqstd_push_UTF(HSQUIRRELVM v, int encoding, const void *inbuf, SQInteg
     const SQChar *str;
     SQUnsignedInteger str_alloc;
     SQInteger str_len;
-    SQInteger r = sqstd_UTF_to_SQChar( encoding, inbuf, inbuf_size, &str, &str_alloc, &str_len);
+    SQInteger r = sqstd_text_fromutf( encoding, inbuf, inbuf_size, &str, &str_alloc, &str_len);
     sq_pushstring(v, str, str_len);
-    sqstd_textrelease( str, str_alloc);
+    sqstd_text_release( str, str_alloc);
     return r;
 }
 #endif // TEST_WO_SQAPI
@@ -994,6 +925,7 @@ struct SQTextReader
     virtual int read_next( void) = 0;
     virtual int init_from_buffer( uint8_t *tmp_buf, int tmp_buf_len) = 0;
     int ClearErrors( void) { int r = _errors; _errors = 0; return r; }
+    int EOF( void) const { return (_buf_pos >= _buf_len) ? sqstd_seof(_stream) : 0; }
     int PeekChar( SQChar *pc)
     {
         int r = CV_OK;
@@ -1306,7 +1238,7 @@ SQSTDTEXTRD sqstd_text_reader( SQSTREAM stream, int encoding, SQBool read_bom, c
     return (SQSTDTEXTRD)rd;
 }
 
-void sqstd_text_releasereader( SQSTDTEXTRD reader)
+void sqstd_text_readerrelease( SQSTDTEXTRD reader)
 {
     SQTextReader *rd = (SQTextReader*)reader;
     rd->~SQTextReader();
@@ -1330,6 +1262,18 @@ SQInteger sqstd_text_readline( SQSTDTEXTRD reader, SQChar **pbuff, SQChar * cons
     SQTextReader *rd = (SQTextReader*)reader;
     SQInteger r = rd->ReadLine( pbuff, buff_end);
     return r == CV_OK ? SQ_OK : SQ_ERROR;
+}
+
+SQInteger sqstd_text_rderrors( SQSTDTEXTRD reader)
+{
+    SQTextReader *rd = (SQTextReader*)reader;
+    return rd->ClearErrors();
+}
+
+SQUIRREL_API SQInteger sqstd_text_rdeof( SQSTDTEXTRD reader)
+{
+    SQTextReader *rd = (SQTextReader*)reader;
+    return rd->EOF();
 }
 
 /* ====================================
@@ -1563,7 +1507,7 @@ SQSTDTEXTWR sqstd_text_writer( SQSTREAM stream, int encoding, SQBool write_bom, 
     return wr;
 }
 
-void sqstd_text_releasewriter( SQSTDTEXTWR writer)
+void sqstd_text_writerrelease( SQSTDTEXTWR writer)
 {
     SQTextWriter *wr = (SQTextWriter*)writer;
     //wr->~SQTextWriter();
@@ -1580,6 +1524,12 @@ SQInteger sqstd_text_writestring( SQSTDTEXTWR writer, const SQChar *str, SQInteg
 {
     SQTextWriter *wr = (SQTextWriter*)writer;
     return wr->WriteString( str, len);
+}
+
+SQInteger sqstd_text_wrerrors( SQSTDTEXTWR writer)
+{
+    SQTextWriter *wr = (SQTextWriter*)writer;
+    return wr->ClearErrors();
 }
 
 /* ====================================
@@ -1618,7 +1568,7 @@ static SQRESULT _textrw_blobtostr(HSQUIRRELVM v)
     if( SQ_FAILED(sqstd_getblob(v,2,&ptr))) return SQ_ERROR;
     size = sqstd_getblobsize(v,2);
     sq_getstring(v,3,&enc);
-    enc_id = sqstd_textencbyname( enc);
+    enc_id = sqstd_text_encbyname( enc);
     if( enc_id < 0) {
         return sq_throwerror(v,_SC("Unknown encoding name"));
     }
@@ -1641,22 +1591,22 @@ static SQRESULT _textrw_strtoblob(HSQUIRRELVM v)
     SQInteger out_size;
     SQBool is_strict = SQFalse;
     sq_getstring(v,3,&enc);
-    enc_id = sqstd_textencbyname( enc);
+    enc_id = sqstd_text_encbyname( enc);
     if( enc_id < 0) {
         return sq_throwerror(v,_SC("Unknown encoding name"));
     }
     if( sq_gettop(v) > 3) {
         sq_getbool(v,4,&is_strict);
     }
-    SQInteger r = sqstd_get_UTF(v,2,enc_id,&out,&out_alloc,&out_size);
+    SQInteger r = sqstd_text_get(v,2,enc_id,&out,&out_alloc,&out_size);
     if( is_strict && r) {
-        sqstd_textrelease(out,out_alloc);
+        sqstd_text_release(out,out_alloc);
         return sq_throwerror(v,_SC("Text conversion failed"));
     }
     else {
         SQUserPointer blob = sqstd_createblob(v,out_size);
         memcpy(blob,out,out_size);
-        sqstd_textrelease(out,out_alloc);
+        sqstd_text_release(out,out_alloc);
         return 1;
     }
 }
@@ -1677,7 +1627,7 @@ static HSQMEMBERHANDLE textrd__stream_handle;
 static SQInteger _textrd_releasehook( SQUserPointer p, SQInteger SQ_UNUSED_ARG(size))
 {
     SQSTDTEXTRD rdr = (SQSTDTEXTRD)p;
-    sqstd_text_releasereader(rdr);
+    sqstd_text_readerrelease(rdr);
     return 1;
 }
 
@@ -1701,7 +1651,7 @@ static SQInteger _textrd_constructor(HSQUIRRELVM v)
         }
     }
 
-    enc_id = sqstd_textencbyname( encoding);
+    enc_id = sqstd_text_encbyname( encoding);
     if( enc_id == -1) {
         return sq_throwerror(v,_SC("unknown encoding"));
     }
@@ -1709,7 +1659,7 @@ static SQInteger _textrd_constructor(HSQUIRRELVM v)
     SQSTDTEXTRD rdr = sqstd_text_reader( stream, enc_id, read_bom, bad_char);
     if( rdr) {
         if(SQ_FAILED(sq_setinstanceup(v,1,rdr))) {
-            sqstd_text_releasereader(rdr);
+            sqstd_text_readerrelease(rdr);
             return sq_throwerror(v, _SC("cannot create text reader instance"));
         }
 
@@ -1836,7 +1786,7 @@ static HSQMEMBERHANDLE textwr__stream_handle;
 static SQInteger _textwr_releasehook( SQUserPointer p, SQInteger SQ_UNUSED_ARG(size))
 {
     SQSTDTEXTWR wrt = (SQSTDTEXTWR)p;
-    sqstd_text_releasewriter(wrt);
+    sqstd_text_writerrelease(wrt);
     return 1;
 }
 
@@ -1860,7 +1810,7 @@ static SQInteger _textwr_constructor(HSQUIRRELVM v)
         }
     }
 
-    enc_id = sqstd_textencbyname( encoding);
+    enc_id = sqstd_text_encbyname( encoding);
     if( enc_id == -1) {
         return sq_throwerror(v,_SC("unknown encoding"));
     }
@@ -1868,7 +1818,7 @@ static SQInteger _textwr_constructor(HSQUIRRELVM v)
     SQSTDTEXTWR wrt = sqstd_text_writer( stream, enc_id, write_bom, 0);
     if( wrt) {
         if(SQ_FAILED(sq_setinstanceup(v,1,wrt))) {
-            sqstd_text_releasewriter(wrt);
+            sqstd_text_writerrelease(wrt);
             return sq_throwerror(v, _SC("cannot create text writer instance"));
         }
 

@@ -5,9 +5,11 @@
 
 #include <squirrel.h>
 #include <sqstdstream.h>
-#include <sqstdtextrw.h>
+#include <sqstdtext.h>
 
 #include <env.h>
+
+#define AR(...) __VA_ARGS__
 
 #define ALIGN_2( _x)    _x __attribute__ ((aligned (2)))
 #define ALIGN_4( _x)    _x __attribute__ ((aligned (4)))
@@ -69,7 +71,7 @@ const struct data_U_to_SQ_tag
 #undef U2SQ
 };
 
-//sqstd_SQChar_to_UTF( int encoding, const SQChar *str, SQInteger str_len,
+//sqstd_text_toutf( int encoding, const SQChar *str, SQInteger str_len,
 //                const void **pout, SQUnsignedInteger *pout_alloc, SQInteger *pout_size);
 const struct data_SQ_to_U_tag
 {
@@ -103,8 +105,8 @@ static int test_sqstd_SQChar_to_UTF_len( int enc)
     int expect_copy = 0;
     int i;
 
-    if( (sqstd_textdefaultenc() == enc) ||
-        (((enc == SQTEXTENC_N_UTF16) || (enc == SQTEXTENC_N_UTF32)) && (sqstd_textnativeenc(enc) == sqstd_textdefaultenc())) )
+    if( (sqstd_text_defaultenc() == enc) ||
+        (((enc == SQTEXTENC_N_UTF16) || (enc == SQTEXTENC_N_UTF32)) && (sqstd_text_nativeenc(enc) == sqstd_text_defaultenc())) )
     {
         expect_copy = 1;
     }
@@ -113,18 +115,18 @@ static int test_sqstd_SQChar_to_UTF_len( int enc)
 
 // str 0
 
-    r = sqstd_SQChar_to_UTF( enc, 0, 13, &out, &out_alloc, &out_size);
+    r = sqstd_text_toutf( enc, 0, 13, &out, &out_alloc, &out_size);
     printf( "r=%d, out=%p, out_alloc=%u, out_size=%d\n", r, out, out_alloc, out_size);
     if( r == 0)
     {
         printf( "NOK - result is 0\n");
         errors++;
     }
-    sqstd_textrelease( out, out_alloc);
+    sqstd_text_release( out, out_alloc);
 
 // str_len 0
 
-    r = sqstd_SQChar_to_UTF( enc, data.str, 0, &out, &out_alloc, &out_size);
+    r = sqstd_text_toutf( enc, data.str, 0, &out, &out_alloc, &out_size);
     printf( "r=%d, out=%p, out_alloc=%u, out_size=%d\n", r, out, out_alloc, out_size);
     if( r != 0)
     {
@@ -148,11 +150,11 @@ static int test_sqstd_SQChar_to_UTF_len( int enc)
         printf( "NOK - answer size not match\n");
         errors++;
     }
-    sqstd_textrelease( out, out_alloc);
+    sqstd_text_release( out, out_alloc);
 
 // str_len given - same as strlen
 
-    r = sqstd_SQChar_to_UTF( enc, data.str, data.str_len, &out, &out_alloc, &out_size);
+    r = sqstd_text_toutf( enc, data.str, data.str_len, &out, &out_alloc, &out_size);
     printf( "r=%d, out=%p, out_alloc=%u, out_size=%d\n", r, out, out_alloc, out_size);
     env_dump_buffer( out, out_size + data.char_size); printf( "\n");
     if( r != 0)
@@ -189,11 +191,11 @@ static int test_sqstd_SQChar_to_UTF_len( int enc)
         printf( "NOK - answer size not match\n");
         errors++;
     }
-    sqstd_textrelease( out, out_alloc);
+    sqstd_text_release( out, out_alloc);
 
 // str_len not given (use own strlen)
 
-    r = sqstd_SQChar_to_UTF( enc, data.str, -1, &out, &out_alloc, &out_size);
+    r = sqstd_text_toutf( enc, data.str, -1, &out, &out_alloc, &out_size);
     printf( "r=%d, out=%p, out_alloc=%u, out_size=%d\n", r, out, out_alloc, out_size);
     env_dump_buffer( out, out_size + data.char_size); printf( "\n");
     if( r != 0)
@@ -230,11 +232,11 @@ static int test_sqstd_SQChar_to_UTF_len( int enc)
         printf( "NOK - answer size not match\n");
         errors++;
     }
-    sqstd_textrelease( out, out_alloc);
+    sqstd_text_release( out, out_alloc);
 
 // str_len given - different from strlen
 
-    r = sqstd_SQChar_to_UTF( enc, data.str, data.str_len - 1 , &out, &out_alloc, &out_size);
+    r = sqstd_text_toutf( enc, data.str, data.str_len - 1 , &out, &out_alloc, &out_size);
     printf( "r=%d, out=%p, out_alloc=%u, out_size=%d\n", r, out, out_alloc, out_size);
     env_dump_buffer( out, out_size + data.char_size); printf( "\n");
     if( r != 0)
@@ -265,7 +267,7 @@ static int test_sqstd_SQChar_to_UTF_len( int enc)
         printf( "NOK - answer size not match\n");
         errors++;
     }
-    sqstd_textrelease( out, out_alloc);
+    sqstd_text_release( out, out_alloc);
 
     return errors;
 }
@@ -296,8 +298,8 @@ static int test_sqstd_UTF_to_SQChar_len( int enc)
     SQInteger r;
     int expect_copy = 0;
 
-    if( (sqstd_textdefaultenc() == enc) ||
-        (((enc == SQTEXTENC_N_UTF16) || (enc == SQTEXTENC_N_UTF32)) && (sqstd_textnativeenc(enc) == sqstd_textdefaultenc())) )
+    if( (sqstd_text_defaultenc() == enc) ||
+        (((enc == SQTEXTENC_N_UTF16) || (enc == SQTEXTENC_N_UTF32)) && (sqstd_text_nativeenc(enc) == sqstd_text_defaultenc())) )
     {
         expect_copy = 1;
     }
@@ -306,18 +308,18 @@ static int test_sqstd_UTF_to_SQChar_len( int enc)
 
 // inbuf 0
 
-    r = sqstd_UTF_to_SQChar( enc, 0, 13, &str, &str_alloc, &str_len);
+    r = sqstd_text_fromutf( enc, 0, 13, &str, &str_alloc, &str_len);
     printf( "r=%d, str=%p, str_alloc=%u, str_len=%d\n", r, (const void*)str, str_alloc, str_len);
     if( r == 0)
     {
         printf( "NOK - result is 0\n");
         errors++;
     }
-    sqstd_textrelease( str, str_alloc);
+    sqstd_text_release( str, str_alloc);
 
 // inbuf_size 0
 
-    r = sqstd_UTF_to_SQChar( enc, data.inbuf, 0, &str, &str_alloc, &str_len);
+    r = sqstd_text_fromutf( enc, data.inbuf, 0, &str, &str_alloc, &str_len);
     printf( "r=%d, str=%p, str_alloc=%u, str_len=%d\n", r, (const void*)str, str_alloc, str_len);
     if( r != 0)
     {
@@ -337,11 +339,11 @@ static int test_sqstd_UTF_to_SQChar_len( int enc)
         printf( "NOK - answer len not match\n");
         errors++;
     }
-    sqstd_textrelease( str, str_alloc);
+    sqstd_text_release( str, str_alloc);
 
 // inbuf_size given - same as strlen
 
-    r = sqstd_UTF_to_SQChar( enc, data.inbuf, data.inbuf_size - data.char_size, &str, &str_alloc, &str_len);
+    r = sqstd_text_fromutf( enc, data.inbuf, data.inbuf_size - data.char_size, &str, &str_alloc, &str_len);
     printf( "r=%d, str=%p, str_alloc=%u, str_len=%d\n", r, (const void*)str, str_alloc, str_len);
     env_dump_buffer( str, (str_len+1)*sizeof(SQChar)); printf( "\n");
     if( r != 0)
@@ -378,11 +380,11 @@ static int test_sqstd_UTF_to_SQChar_len( int enc)
         printf( "NOK - answer len not match\n");
         errors++;
     }
-    sqstd_textrelease( str, str_alloc);
+    sqstd_text_release( str, str_alloc);
 
 // inbuf_size not given (use own strlen)
 
-    r = sqstd_UTF_to_SQChar( enc, data.inbuf, -1, &str, &str_alloc, &str_len);
+    r = sqstd_text_fromutf( enc, data.inbuf, -1, &str, &str_alloc, &str_len);
     printf( "r=%d, str=%p, str_alloc=%u, str_len=%d\n", r, (const void*)str, str_alloc, str_len);
     env_dump_buffer( str, (str_len+1)*sizeof(SQChar)); printf( "\n");
     if( r != 0)
@@ -419,11 +421,11 @@ static int test_sqstd_UTF_to_SQChar_len( int enc)
         printf( "NOK - answer len not match\n");
         errors++;
     }
-    sqstd_textrelease( str, str_alloc);
+    sqstd_text_release( str, str_alloc);
 
 // inbuf_size given - different from strlen
 
-    r = sqstd_UTF_to_SQChar( enc, data.inbuf, data.inbuf_size - 2*data.char_size, &str, &str_alloc, &str_len);
+    r = sqstd_text_fromutf( enc, data.inbuf, data.inbuf_size - 2*data.char_size, &str, &str_alloc, &str_len);
     printf( "r=%d, str=%p, str_alloc=%u, str_len=%d\n", r, (const void*)str, str_alloc, str_len);
     env_dump_buffer( str, (str_len+1)*sizeof(SQChar)); printf( "\n");
     if( r != 0)
@@ -449,13 +451,13 @@ static int test_sqstd_UTF_to_SQChar_len( int enc)
         printf( "NOK - answer len not match\n");
         errors++;
     }
-    sqstd_textrelease( str, str_alloc);
+    sqstd_text_release( str, str_alloc);
 
 // inbuf_size given - not at char boundary
 
     if( (enc != SQTEXTENC_UTF8) && (enc != SQTEXTENC_ASCII))
     {
-        r = sqstd_UTF_to_SQChar( enc, data.inbuf, data.inbuf_size - data.char_size - 1, &str, &str_alloc, &str_len);
+        r = sqstd_text_fromutf( enc, data.inbuf, data.inbuf_size - data.char_size - 1, &str, &str_alloc, &str_len);
         printf( "r=%d, str=%p, str_alloc=%u, str_len=%d\n", r, (const void*)str, str_alloc, str_len);
         env_dump_buffer( str, (str_len+1)*sizeof(SQChar)); printf( "\n");
         if( r != 0)
@@ -473,7 +475,7 @@ static int test_sqstd_UTF_to_SQChar_len( int enc)
             printf( "NOK - answer not match\n");
             errors++;
         }
-        sqstd_textrelease( str, str_alloc);
+        sqstd_text_release( str, str_alloc);
     }
 
     return errors;
@@ -495,7 +497,7 @@ static int test_sqstd_UTF_to_SQChar( void)
     return errors;
 }
 
-struct utf_8_test
+struct utf_test
 {
     const char *name;
     const void *in;
@@ -506,32 +508,29 @@ struct utf_8_test
     SQInteger r2;
 };
 
-#define TEST( _name, _r1, _r2, _in, _out) \
-    static uint8_t data_8_in_##_name[] = _in; \
-    static uint8_t data_8_out_##_name[] = _out;
+#define TEST_CONV   0
+#define TEST_COPY   1
+#define TEST_REV    2
 
-#include "test_utf8.h"
-
-#undef TEST
-#define TEST( _name, _r1, _r2, _in, _out) \
-    { \
-        #_name, \
-        data_8_in_##_name, sizeof(data_8_in_##_name), \
-        data_8_out_##_name, sizeof(data_8_out_##_name), \
-        _r1, _r2 \
-    },
-
-static const struct utf_8_test utf_8_tests[] = {
-#include "test_utf8.h"
-    { 0,0,0,0,0,0,0 }
-};
-
-#undef TEST
-
-static int test_utf8( void)
+static int test_utf( int enc, int char_size, const struct utf_test *test)
 {
-    const struct utf_8_test *test = utf_8_tests;
+    //const struct utf_8_test *test = utf_8_tests;
     int errors = 0;
+    int test_kind = TEST_CONV;
+    if( enc == sqstd_text_defaultenc())
+    {
+        test_kind = TEST_COPY;
+        printf( "Test type - copy\n");
+    }
+    else if( sqstd_text_nativeenc(enc) == sqstd_text_defaultenc())
+    {
+        test_kind = TEST_REV;
+        printf( "Test type - rev\n");
+    }
+    else
+    {
+        printf( "Test type - convert\n");
+    }
     while( test->name)
     {
         const SQChar *str;
@@ -541,10 +540,10 @@ static int test_utf8( void)
 
         printf( "test %s\n", test->name);
 
-        r = sqstd_UTF_to_SQChar( SQTEXTENC_UTF8, test->in, test->in_size, &str, &str_alloc, &str_len);
+        r = sqstd_text_fromutf( enc, test->in, test->in_size, &str, &str_alloc, &str_len);
         printf( "r=%d, str=%p, str_alloc=%u, str_len=%d\n", r, (const void*)str, str_alloc, str_len);
         env_dump_buffer( str, (str_len+1)*sizeof(SQChar)); printf( "\n");
-        if( sizeof(SQChar) != 1)
+        if( test_kind == TEST_CONV)
         {
             const void *out;
             SQUnsignedInteger out_alloc;
@@ -552,16 +551,16 @@ static int test_utf8( void)
 
             if( r != test->r1)
             {
-                printf( "NOK - sqstd_UTF_to_SQChar returns %d\n", r);
+                printf( "NOK - sqstd_text_fromutf returns %d\n", r);
                 errors++;
             }
 
-            r = sqstd_SQChar_to_UTF( SQTEXTENC_UTF8, str, str_len, &out, &out_alloc, &out_size);
+            r = sqstd_text_toutf( enc, str, str_len, &out, &out_alloc, &out_size);
             printf( "r=%d, out=%p, out_alloc=%u, out_size=%d\n", r, out, out_alloc, out_size);
-            env_dump_buffer( out, out_size + sizeof(uint8_t)); printf( "\n");
+            env_dump_buffer( out, out_size + char_size); printf( "\n");
             if( r != test->r2)
             {
-                printf( "NOK - sqstd_SQChar_to_UTF returns %d\n", r);
+                printf( "NOK - sqstd_text_toutf returns %d\n", r);
                 errors++;
             }
             if( out_size == test->out_size)
@@ -577,41 +576,189 @@ static int test_utf8( void)
                 printf( "NOK - answer size not match\n");
                 errors++;
             }
-            sqstd_textrelease( out, out_alloc);
+            sqstd_text_release( out, out_alloc);
         }
-        else
+        else if( test_kind == TEST_COPY)
         {
-            if( r != 0)
-            {
-                printf( "NOK - sqstd_UTF_to_SQChar returns %d\n", r);
-                errors++;
-            }
-            if( (const void*)str != test->in)
-            {
-                printf( "NOK - str is a copy\n");
-                errors++;
-            }
+//            if( r != 0)
+//            {
+//                printf( "NOK - sqstd_text_fromutf returns %d\n", r);
+//                errors++;
+//            }
+//            if( (const void*)str != test->in)
+//            {
+//                printf( "NOK - str is a copy\n");
+//                errors++;
+//            }
         }
-        sqstd_textrelease( str, str_alloc);
+        else // if( test_kind == TEST_REV)
+        {
+        }
+        sqstd_text_release( str, str_alloc);
 
         test++;
     }
     return errors;
 }
 
+// ===== UTF-8 =====================================
+
+#define TEST( _name, _r1, _r2, _in, _out) \
+    static uint8_t data_8_in_##_name[] = _in; \
+    static uint8_t data_8_out_##_name[] = _out;
+
+#include "test_utf8.h"
+
+#undef TEST
+#define TEST( _name, _r1, _r2, _in, _out) \
+    { \
+        "UTF-8 " #_name, \
+        data_8_in_##_name, sizeof(data_8_in_##_name), \
+        data_8_out_##_name, sizeof(data_8_out_##_name), \
+        _r1, _r2 \
+    },
+
+static const struct utf_test utf_8_tests[] = {
+#include "test_utf8.h"
+    { 0,0,0,0,0,0,0 }
+};
+
+#undef TEST
+
+// ===== UTF-16BE =====================================
+
+#define C16(_a, _b) _a, _b
+
+#define TEST( _name, _r1, _r2, _in, _out) \
+    static uint8_t data_16be_in_##_name[] = _in; \
+    static uint8_t data_16be_out_##_name[] = _out;
+
+#include "test_utf16be.h"
+
+#undef TEST
+#define TEST( _name, _r1, _r2, _in, _out) \
+    { \
+        "UTF-16BE " #_name, \
+        data_16be_in_##_name, sizeof(data_16be_in_##_name), \
+        data_16be_out_##_name, sizeof(data_16be_out_##_name), \
+        _r1, _r2 \
+    },
+
+static const struct utf_test utf_16be_tests[] = {
+#include "test_utf16be.h"
+    { 0,0,0,0,0,0,0 }
+};
+
+#undef TEST
+#undef C16
+
+// ===== UTF-16LE =====================================
+
+#define C16(_a, _b) _b, _a
+
+#define TEST( _name, _r1, _r2, _in, _out) \
+    static uint8_t data_16le_in_##_name[] = _in; \
+    static uint8_t data_16le_out_##_name[] = _out;
+
+#include "test_utf16be.h"
+
+#undef TEST
+#define TEST( _name, _r1, _r2, _in, _out) \
+    { \
+        "UTF-16LE " #_name, \
+        data_16le_in_##_name, sizeof(data_16le_in_##_name), \
+        data_16le_out_##_name, sizeof(data_16le_out_##_name), \
+        _r1, _r2 \
+    },
+
+static const struct utf_test utf_16le_tests[] = {
+#include "test_utf16be.h"
+    { 0,0,0,0,0,0,0 }
+};
+
+#undef TEST
+#undef C16
+
+// ===== UTF-32BE =====================================
+
+#define C32(_a, _b, _c, _d) _a, _b, _c, _d
+
+#define TEST( _name, _r1, _r2, _in, _out) \
+    static uint8_t data_32be_in_##_name[] = _in; \
+    static uint8_t data_32be_out_##_name[] = _out;
+
+#include "test_utf32be.h"
+
+#undef TEST
+#define TEST( _name, _r1, _r2, _in, _out) \
+    { \
+        "UTF-32BE " #_name, \
+        data_32be_in_##_name, sizeof(data_32be_in_##_name), \
+        data_32be_out_##_name, sizeof(data_32be_out_##_name), \
+        _r1, _r2 \
+    },
+
+static const struct utf_test utf_32be_tests[] = {
+#include "test_utf32be.h"
+    { 0,0,0,0,0,0,0 }
+};
+
+#undef TEST
+#undef C32
+
+// ===== UTF-32LE =====================================
+
+#define C32(_a, _b, _c, _d) _d, _c, _b, _a
+
+#define TEST( _name, _r1, _r2, _in, _out) \
+    static uint8_t data_32le_in_##_name[] = _in; \
+    static uint8_t data_32le_out_##_name[] = _out;
+
+#include "test_utf32be.h"
+
+#undef TEST
+#define TEST( _name, _r1, _r2, _in, _out) \
+    { \
+        "UTF-32LE " #_name, \
+        data_32le_in_##_name, sizeof(data_32le_in_##_name), \
+        data_32le_out_##_name, sizeof(data_32le_out_##_name), \
+        _r1, _r2 \
+    },
+
+static const struct utf_test utf_32le_tests[] = {
+#include "test_utf32be.h"
+    { 0,0,0,0,0,0,0 }
+};
+
+#undef TEST
+#undef C32
+
 
 int main( void)
 {
     int errors = 0;
 
-    printf( "Default encoding :%u - %s\n", sqstd_textdefaultenc(), env_enc_name[sqstd_textdefaultenc()]);
+    printf( "Default encoding :%u - %s\n", sqstd_text_defaultenc(), env_enc_name[sqstd_text_defaultenc()]);
 
     //env_dump_allocs = 1;
 
-    //errors += test_sqstd_UTF_to_SQChar();
-    //errors += test_sqstd_SQChar_to_UTF();
+    printf( "\n==========\n");
+    errors += test_sqstd_UTF_to_SQChar();
+    printf( "\n==========\n");
+    errors += test_sqstd_SQChar_to_UTF();
 
-    errors += test_utf8();
+    printf( "\n==========\n");
+    errors += test_utf( SQTEXTENC_UTF8, 1, utf_8_tests);
+
+    printf( "\n==========\n");
+    errors += test_utf( SQTEXTENC_UTF16BE, 2, utf_16be_tests);
+    printf( "\n==========\n");
+    errors += test_utf( SQTEXTENC_UTF16LE, 2, utf_16le_tests);
+
+    printf( "\n==========\n");
+    errors += test_utf( SQTEXTENC_UTF32BE, 4, utf_32be_tests);
+    printf( "\n==========\n");
+    errors += test_utf( SQTEXTENC_UTF32LE, 4, utf_32le_tests);
 
     if( errors)
     {

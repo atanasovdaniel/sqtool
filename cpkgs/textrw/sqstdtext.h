@@ -1,6 +1,6 @@
 /*  see copyright notice in sqstdtextrw.cpp */
-#ifndef _SQSTDTEXTRW_H_
-#define _SQSTDTEXTRW_H_
+#ifndef _SQSTDTEXT_H_
+#define _SQSTDTEXT_H_
 
 #ifdef __cplusplus
 extern "C" {
@@ -15,35 +15,35 @@ extern "C" {
 #define SQTEXTENC_UTF32LE   6
 #define SQTEXTENC_ASCII     7
 
-SQUIRREL_API SQInteger sqstd_textencbyname( const SQChar *name);
-SQUIRREL_API SQInteger sqstd_textdefaultenc( void);
-SQUIRREL_API SQInteger sqstd_textnativeenc( SQInteger enc);
+SQUIRREL_API SQInteger sqstd_text_encbyname( const SQChar *name);
+SQUIRREL_API const SQChar* sqstd_text_encname( SQInteger enc);
+SQUIRREL_API SQInteger sqstd_text_defaultenc( void);
+SQUIRREL_API SQInteger sqstd_text_nativeenc( SQInteger enc);
 
-SQUIRREL_API const SQChar* sqstd_textdefaultencname( void);
-
-SQUIRREL_API SQInteger sqstd_UTF_to_SQChar( int encoding, const void *inbuf, SQInteger inbuf_size,
+SQUIRREL_API SQInteger sqstd_text_fromutf( int encoding, const void *inbuf, SQInteger inbuf_size,
                  const SQChar **pstr, SQUnsignedInteger *palloc, SQInteger *plen);
-SQUIRREL_API SQInteger sqstd_SQChar_to_UTF( int encoding, const SQChar *str, SQInteger str_len,
+SQUIRREL_API SQInteger sqstd_text_toutf( int encoding, const SQChar *str, SQInteger str_len,
                 const void **pout, SQUnsignedInteger *pout_alloc, SQInteger *pout_size);
-SQUIRREL_API void sqstd_textrelease( const void *text, SQUnsignedInteger text_alloc_size);
+SQUIRREL_API void sqstd_text_release( const void *text, SQUnsignedInteger text_alloc_size);
 
-SQUIRREL_API SQInteger sqstd_get_UTF(HSQUIRRELVM v, SQInteger idx, int encoding, const void **pout, SQUnsignedInteger *pout_alloc, SQInteger *pout_size);
-SQUIRREL_API SQInteger sqstd_push_UTF(HSQUIRRELVM v, int encoding, const void *inbuf, SQInteger inbuf_size);
+SQUIRREL_API SQInteger sqstd_text_get(HSQUIRRELVM v, SQInteger idx, int encoding, const void **pout, SQUnsignedInteger *pout_alloc, SQInteger *pout_size);
+SQUIRREL_API SQInteger sqstd_text_push(HSQUIRRELVM v, int encoding, const void *inbuf, SQInteger inbuf_size);
 
 typedef void *SQSTDTEXTRD;
 SQUIRREL_API SQSTDTEXTRD sqstd_text_reader( SQSTREAM stream, int encoding, SQBool read_bom, const SQChar *bad_char);
-SQUIRREL_API void sqstd_text_releasereader( SQSTDTEXTRD reader);
-SQUIRREL_API SQInteger sqstd_text_readcodepoint( SQSTDTEXTRD reader, SQInteger *pwc);
+SQUIRREL_API void sqstd_text_readerrelease( SQSTDTEXTRD reader);
 SQUIRREL_API SQInteger sqstd_text_peekchar( SQSTDTEXTRD reader, SQChar *pc);
 SQUIRREL_API SQInteger sqstd_text_readchar( SQSTDTEXTRD reader, SQChar *pc);
 SQUIRREL_API SQInteger sqstd_text_readline( SQSTDTEXTRD reader, SQChar **pbuff, SQChar * const buff_end);
+SQUIRREL_API SQInteger sqstd_text_rderrors( SQSTDTEXTRD reader);
+SQUIRREL_API SQInteger sqstd_text_rdeof( SQSTDTEXTRD reader);
 
 typedef void *SQSTDTEXTWR;
 SQSTDTEXTWR sqstd_text_writer( SQSTREAM stream, int encoding, SQBool write_bom, const SQChar *bad_char);
-SQUIRREL_API void sqstd_text_releasewriter( SQSTDTEXTWR writer);
-SQUIRREL_API SQInteger sqstd_text_writecodepoint( SQSTDTEXTWR writer, SQInteger wc);
+SQUIRREL_API void sqstd_text_writerrelease( SQSTDTEXTWR writer);
 SQUIRREL_API SQInteger sqstd_text_writechar( SQSTDTEXTWR writer, SQChar c);
 SQUIRREL_API SQInteger sqstd_text_writestring( SQSTDTEXTWR writer, const SQChar *str, SQInteger len);
+SQUIRREL_API SQInteger sqstd_text_wrerrors( SQSTDTEXTWR reader);
 
 SQUIRREL_API SQUserPointer _sqstd_textrd_type_tag(void);
 #define SQSTD_TEXTRD_TYPE_TAG _sqstd_textrd_type_tag()
@@ -55,4 +55,4 @@ SQUIRREL_API SQUserPointer _sqstd_textwr_type_tag(void);
 } /*extern "C"*/
 #endif
 
-#endif // _SQSTDTEXTRW_H_
+#endif // _SQSTDTEXT_H_

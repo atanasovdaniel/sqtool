@@ -30,7 +30,7 @@ mk_test16: $(OUTDIR)
 mk_test32: $(OUTDIR)
 	$(MAKE) -C$(OUTDIR)/32 -f $(TESTROOT)/Makefile TEST_BITS=32 test
 
-test: $(TESTROOT)/../sqstdtextrw.cpp $(TESTROOT)/src/env.c $(TESTROOT)/src/main.c
+test: $(TESTROOT)/../sqstdtext.cpp $(TESTROOT)/src/env.c $(TESTROOT)/src/main.c
 	$(CXX) $(CXX_FLAGS) $(INCLUDES) $(DEFINES) -DTEST_UTF$(TEST_BITS) $^ -o $@
 	-./test > out.txt 2> err.txt
 	-gcov sqstdtextrw.cpp

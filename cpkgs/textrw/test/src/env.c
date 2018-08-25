@@ -8,6 +8,8 @@
 
 #include <env.h>
 
+int env_stream_eof;
+
 void env_dump_buffer( const void *buf, int len)
 {
     const uint8_t *p = (const uint8_t*)buf;
@@ -74,6 +76,11 @@ SQInteger sqstd_sread( void *buf, SQInteger len, SQ_UNUSED_ARG(SQSTREAM stream))
         srd_len -= left;
     }
     return left;
+}
+
+SQInteger sqstd_seof(SQ_UNUSED_ARG(SQSTREAM stream))
+{
+    return env_stream_eof;
 }
 
 static uint8_t *swr_buff;

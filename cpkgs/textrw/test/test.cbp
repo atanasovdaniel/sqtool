@@ -86,8 +86,8 @@
 		</Compiler>
 		<Unit filename="../../../squirrel/include/sqstdstream.h" />
 		<Unit filename="../../../squirrel/include/squirrel.h" />
-		<Unit filename="../sqstdtextrw.cpp" />
-		<Unit filename="../sqstdtextrw.h" />
+		<Unit filename="../sqstdtext.cpp" />
+		<Unit filename="../sqstdtext.h" />
 		<Unit filename="Makefile" />
 		<Unit filename="include/env.h" />
 		<Unit filename="include/sqconfig.h" />
@@ -97,6 +97,8 @@
 		<Unit filename="src/main.c">
 			<Option compilerVar="CC" />
 		</Unit>
+		<Unit filename="src/test_utf16be.h" />
+		<Unit filename="src/test_utf32be.h" />
 		<Unit filename="src/test_utf8.h" />
 		<Extensions>
 			<code_completion />
