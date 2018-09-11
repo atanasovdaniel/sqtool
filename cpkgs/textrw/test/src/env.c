@@ -80,22 +80,29 @@ SQInteger sqstd_sread( void *buf, SQInteger len, SQ_UNUSED_ARG(SQSTREAM stream))
 
 SQInteger sqstd_seof(SQ_UNUSED_ARG(SQSTREAM stream))
 {
-    return env_stream_eof;
+    return (srd_len <= 0) || env_stream_eof;
 }
 
 static uint8_t *swr_buff;
-static SQInteger swr_len = -1;
+static SQInteger swr_len = 0;
+static SQInteger swr_len_0;
 int env_sqstd_swrite_dump;
 
 void env_set_swrite_buffer( void *buf, SQInteger len)
 {
     swr_buff = (uint8_t*)buf;
     swr_len = len;
+    swr_len_0 = len;
+}
+
+SQInteger env_get_swrite_len( void)
+{
+    return swr_len_0 - swr_len;
 }
 
 SQInteger sqstd_swrite( const void *buf, SQInteger len, SQ_UNUSED_ARG(SQSTREAM stream))
 {
-    if( swr_len >= 0)
+    if( swr_len > 0)
     {
         SQInteger left = len;
         if( left > swr_len) left = swr_len;
@@ -109,6 +116,6 @@ SQInteger sqstd_swrite( const void *buf, SQInteger len, SQ_UNUSED_ARG(SQSTREAM s
     }
     else
     {
-        return len;
+        return 0;
     }
 }

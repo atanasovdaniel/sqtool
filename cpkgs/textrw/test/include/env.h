@@ -5,10 +5,11 @@ extern void env_dump_buffer( const void *buf, int len);
 
 extern int env_dump_allocs;
 
-extern void env_set_sread_buffer( void *buf, SQInteger len);
+extern void env_set_sread_buffer( const void *buf, SQInteger len);
 extern int env_stream_eof;
 
 extern int env_sqstd_swrite_dump;
 extern void env_set_swrite_buffer( void *buf, SQInteger len);
+extern SQInteger env_get_swrite_len( void);
 
 #endif // __ENV_H__
