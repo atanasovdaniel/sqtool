@@ -1077,9 +1077,7 @@ struct SQTextReaderSQ : SQTextReader
                 tmp_buf_len += to_append;
             }
             else {
-                if( rd) {
-                    _errors++;
-                }
+                _errors++;
                 r = -1; // EOF
             }
         }
@@ -1234,11 +1232,13 @@ static int read_BOM( SQSTREAM stream, uint8_t *tmp_buf, int *penc_id)
                 // UTF32BE
                 tmp_buf_len = 0;
                 *penc_id = SQTEXTENC_UTF32BE;
+                break;
             }
             else if( (tmp_buf[0] == 0xFF) && (tmp_buf[1] == 0xFE) && (tmp_buf[2] == 0x00) && (tmp_buf[3] == 0x00)) {
                 // UTF32LE
                 tmp_buf_len = 0;
                 *penc_id = SQTEXTENC_UTF32LE;
+                break;
             }
         case 3:
             if( (tmp_buf[0] == 0xEF) && (tmp_buf[1] == 0xBB) && (tmp_buf[2] == 0xBF)) {
@@ -1246,6 +1246,7 @@ static int read_BOM( SQSTREAM stream, uint8_t *tmp_buf, int *penc_id)
                 tmp_buf[0] = tmp_buf[3];
                 tmp_buf_len = (tmp_buf_len > 3) ? tmp_buf_len - 3 : 0;
                 *penc_id = SQTEXTENC_UTF8;
+                break;
             }
         case 2:
             if( (tmp_buf[0] == 0xFE) && (tmp_buf[1] == 0xFF)) {
@@ -1253,12 +1254,14 @@ static int read_BOM( SQSTREAM stream, uint8_t *tmp_buf, int *penc_id)
                 *(uint16_t*)tmp_buf = *(uint16_t*)(tmp_buf+2);
                 tmp_buf_len = (tmp_buf_len > 2) ? tmp_buf_len - 2 : 0;
                 *penc_id = SQTEXTENC_UTF16BE;
+                break;
             }
             else if( (tmp_buf[0] == 0xFF) && (tmp_buf[1] == 0xFE)) {
                 // UTF16LE
                 *(uint16_t*)tmp_buf = *(uint16_t*)(tmp_buf+2);
                 tmp_buf_len = (tmp_buf_len > 2) ? tmp_buf_len - 2 : 0;
                 *penc_id = SQTEXTENC_UTF16LE;
+                break;
             }
         default:
             break;

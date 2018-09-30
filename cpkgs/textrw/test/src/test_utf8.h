@@ -250,3 +250,137 @@
 		AR({ 0xEE, 0x80, 0x80, 'Z' }),
 		AR({ 0xEE, 0x80, 0x80, 'Z' })
 	)
+
+	// BOM 8
+   	TEST( 8_bom_8_ok, 0, SQTEXTENC_UTF8, F_IS_BOM,
+		AR({ 0xEF, 0xBB, 0xBF, 'Z' }),
+		AR({ 'Z' })
+	)
+   	TEST( 8_bom_8_eof, 0, SQTEXTENC_UTF8, F_IS_BOM | F_RES_EMPTY,
+		AR({ 0xEF, 0xBB, 0xBF }),
+		AR({ '!' })
+	)
+   	TEST( 8_bom_8_not_1, 0, -1, F_IS_BOM,
+		AR({ 0xEF }),
+		AR({ BAD8 })
+	)
+   	TEST( 8_bom_8_not_1a, 0, -1, F_IS_BOM,
+		AR({ 0xEF, 'Z' }),
+		AR({ BAD8, 'Z' })
+	)
+   	TEST( 8_bom_8_not_2, 0, -1, F_IS_BOM,
+		AR({ 0xEF, 0xBB }),
+		AR({ BAD8 })
+	)
+   	TEST( 8_bom_8_not_2a, 0, -1, F_IS_BOM,
+		AR({ 0xEF, 0xBB, 'Z' }),
+		AR({ BAD8, 'Z' })
+	)
+	TEST( 8_bom_8_inv_1a, -1, SQTEXTENC_UTF8, F_IS_BOM,
+		AR({ 0xEF, 0xBB, 0xBF, 0xEF }),
+		AR({ BAD8 })
+	)
+//	TEST( 8_bom_8_inv_1b, -1, SQTEXTENC_UTF8, F_IS_BOM,
+//		AR({ 0xEF, 0xBB, 0xBF, 0xEF, 0x80, 0x80, 0x80, 'Z' }),
+//		AR({ 0xEF, 0x80, 0x80, BAD8, 'Z' })
+//	)
+
+	// BOM 16be
+   	TEST( 8_bom_16be_ok, 0, SQTEXTENC_UTF16BE, F_IS_BOM,
+		AR({ 0xFE, 0xFF, 0x00, 'Z' }),
+		AR({ 'Z' })
+	)
+   	TEST( 8_bom_16be_eof, 0, SQTEXTENC_UTF16BE, F_IS_BOM | F_RES_EMPTY,
+		AR({ 0xFE, 0xFF}),
+		AR({ '!' })
+	)
+   	TEST( 8_bom_16be_part, 0, SQTEXTENC_UTF16BE, F_IS_BOM | F_IS_CUT,
+		AR({ 0xFE, 0xFF, 0x00 }),
+		AR({ BAD8 })
+	)
+   	TEST( 8_bom_16be_not_1, 0, -1, F_IS_BOM,
+		AR({ 0xFE }),
+		AR({ BAD8 })
+	)
+   	TEST( 8_bom_16be_not_1a, 0, -1, F_IS_BOM,
+		AR({ 0xFE, 'Z' }),
+		AR({ BAD8, 'Z' })
+	)
+
+	// BOM 16le
+   	TEST( 8_bom_16le_ok, 0, SQTEXTENC_UTF16LE, F_IS_BOM,
+		AR({ 0xFF, 0xFE, 'Z', 0x00 }),
+		AR({ 'Z' })
+	)
+   	TEST( 8_bom_16le_eof, 0, SQTEXTENC_UTF16LE, F_IS_BOM | F_RES_EMPTY,
+		AR({ 0xFF, 0xFE}),
+		AR({ '!' })
+	)
+   	TEST( 8_bom_16le_part, 0, SQTEXTENC_UTF16LE, F_IS_BOM | F_IS_CUT,
+		AR({ 0xFF, 0xFE, 'Z' }),
+		AR({ BAD8 })
+	)
+   	TEST( 8_bom_16le_not_1, 0, -1, F_IS_BOM,
+		AR({ 0xFF }),
+		AR({ BAD8 })
+	)
+   	TEST( 8_bom_16le_not_1a, 0, -1, F_IS_BOM,
+		AR({ 0xFF, 'Z' }),
+		AR({ BAD8, 'Z' })
+	)
+
+	// BOM 32be
+   	TEST( 8_bom_32be_ok, 0, SQTEXTENC_UTF32BE, F_IS_BOM,
+		AR({ 0x00, 0x00, 0xFE, 0xFF, 0x00, 0x00, 0x00, 'Z' }),
+		AR({ 'Z' })
+	)
+   	TEST( 8_bom_32be_eof, 0, SQTEXTENC_UTF32BE, F_IS_BOM | F_RES_EMPTY,
+		AR({ 0x00, 0x00, 0xFE, 0xFF }),
+		AR({ '!' })
+	)
+   	TEST( 8_bom_32be_not_1, 0, -1, F_IS_BOM,
+		AR({ 0x00 }),
+		AR({ 0x00 })
+	)
+   	TEST( 8_bom_32be_not_1a, 0, -1, F_IS_BOM,
+		AR({ 0x00, 'Z' }),
+		AR({ 0x00, 'Z' })
+	)
+   	TEST( 8_bom_32be_not_2, 0, -1, F_IS_BOM,
+		AR({ 0x00, 0x00 }),
+		AR({ 0x00, 0x00 })
+	)
+   	TEST( 8_bom_32be_not_2a, 0, -1, F_IS_BOM,
+		AR({ 0x00, 0x00, 'Z' }),
+		AR({ 0x00, 0x00, 'Z' })
+	)
+   	TEST( 8_bom_32be_not_3, 0, -1, F_IS_BOM,
+		AR({ 0x00, 0x00, 0xFE }),
+		AR({ 0x00, 0x00, BAD8 })
+	)
+   	TEST( 8_bom_32be_not_3a, 0, -1, F_IS_BOM,
+		AR({ 0x00, 0x00, 0xFE, 'Z' }),
+		AR({ 0x00, 0x00, BAD8, 'Z' })
+	)
+
+	// BOM 32le
+   	TEST( 8_bom_32le_ok, 0, SQTEXTENC_UTF32LE, F_IS_BOM,
+		AR({ 0xFF, 0xFE, 0x00, 0x00, 'Z', 0x00, 0x00, 0x00 }),
+		AR({ 'Z' })
+	)
+   	TEST( 8_bom_32le_eof, 0, SQTEXTENC_UTF32LE, F_IS_BOM | F_RES_EMPTY,
+		AR({ 0xFF, 0xFE, 0x00, 0x00 }),
+		AR({ '!' })
+	)
+   	TEST( 8_bom_32le_not_1, 0, -1, F_IS_BOM,
+		AR({ 0xFF }),
+		AR({ BAD8 })
+	)
+   	TEST( 8_bom_32le_not_2, 0, SQTEXTENC_UTF16LE, F_IS_BOM | F_RES_EMPTY,
+		AR({ 0xFF, 0xFE }),
+		AR({ '!' })
+	)
+   	TEST( 8_bom_32le_not_3, 0, SQTEXTENC_UTF16LE, F_IS_BOM | F_IS_CUT,
+		AR({ 0xFF, 0xFE, 0x00 }),
+		AR({ BAD8 })
+	)

@@ -393,16 +393,18 @@ static int test_sqstd_UTF_to_SQChar( void)
 struct utf_test
 {
     const char *name;
-    const void *in;
+    const uint8_t *in;
     int in_size;
-    const void *out;
+    const uint8_t *out;
     int out_size;
     SQInteger r1;
     SQInteger r2;
     unsigned int flags;
 };
 
-#define F_IS_CUT    1
+#define F_IS_CUT        1
+#define F_IS_BOM        2
+#define F_RES_EMPTY     4
 
 // ===== UTF-8 =====================================
 
@@ -588,6 +590,11 @@ static int test_utf( int enc, int char_size, const struct utf_test *test)
         SQInteger str_len;
         SQInteger r;
 
+        if( test->flags & F_IS_BOM)
+        {
+            test++;
+            continue;
+        }
         printf( "test %s\n", test->name);
 
         r = sqstd_text_fromutf( enc, test->in, test->in_size, &str, &str_alloc, &str_len);
@@ -689,7 +696,6 @@ static int test_utf_rw( int enc, int char_size, const struct utf_test *test)
     int errors = 0;
     SQSTREAM stream = (void*)0x1234;
     printf( "\n======\tsqstd_text_reader --> sqstd_text_writer %s\n", env_enc_name[enc]);
-    int test_kind = get_test_kind( enc);
     while( test->name)
     {
         SQChar buff[1024];
@@ -698,14 +704,54 @@ static int test_utf_rw( int enc, int char_size, const struct utf_test *test)
         SQInteger r_errs;
         SQInteger w_errs;
         int r = 0;
+        int test_kind;
+        int bom_size = 0;
+        int bom_char_size = char_size;
+        SQBool read_bom = (test->flags & F_IS_BOM) ? SQTrue : SQFalse;
 
         printf( "test %s\n", test->name);
+
+        if( !read_bom)
+        {
+            test_kind = get_test_kind( enc);
+        }
+        else
+        {
+            if( test->r2 >= 0)
+            {
+                test_kind = get_test_kind( test->r2);
+                switch( test->r2)
+                {
+                    case SQTEXTENC_UTF8:
+                        bom_size = 3;
+                        bom_char_size = 1;
+                        break;
+                    case SQTEXTENC_N_UTF16:
+                    case SQTEXTENC_UTF16BE:
+                    case SQTEXTENC_UTF16LE:
+                        bom_size = 2;
+                        bom_char_size = 2;
+                        break;
+                    case SQTEXTENC_N_UTF32:
+                    case SQTEXTENC_UTF32BE:
+                    case SQTEXTENC_UTF32LE:
+                        bom_size = 4;
+                        bom_char_size = 4;
+                    default:
+                        break;
+                }
+            }
+            else
+            {
+                test_kind = get_test_kind( enc);
+            }
+        }
 
         {
             SQSTDTEXTRD rdr;
             env_set_sread_buffer( test->in, test->in_size);
             env_stream_eof = 0;
-            rdr = sqstd_text_reader( stream, enc, SQFalse, 0);
+            rdr = sqstd_text_reader( stream, enc, read_bom, 0);
             buff_pos=0;
             while( 1)
             {
@@ -730,81 +776,100 @@ static int test_utf_rw( int enc, int char_size, const struct utf_test *test)
                 printf( "read errors %u\n", r_errs);
             }
             sqstd_text_readerrelease( rdr);
-            env_dump_buffer( buff, buff_pos*sizeof(SQChar)); printf( "\n");
+            printf( "buf: "); env_dump_buffer( buff, buff_pos*sizeof(SQChar)); printf( "\n");
         }
+        if( test->flags & F_RES_EMPTY)
         {
-            SQSTDTEXTWR wrt;
-            env_set_swrite_buffer( wr_buff, sizeof(wr_buff));
-            wrt = sqstd_text_writer( stream, enc, SQFalse, 0);
-            r = sqstd_text_writestring( wrt, buff, buff_pos);
-            w_errs = sqstd_text_wrerrors( wrt);
-            if( w_errs)
+            if( buff_pos != 0)
             {
-                printf( "NOK - write errors %u\n", w_errs);
+                printf( "NOK - buff is not empty\n");
                 errors++;
             }
-            sqstd_text_writerrelease( wrt);
-            env_dump_buffer( wr_buff, env_get_swrite_len()); printf( "\n");
         }
+        else
+        {
+            {
+                SQSTDTEXTWR wrt;
+                env_set_swrite_buffer( wr_buff, sizeof(wr_buff));
+                wrt = sqstd_text_writer( stream, enc, SQFalse, 0);
+                r = sqstd_text_writestring( wrt, buff, buff_pos);
+                w_errs = sqstd_text_wrerrors( wrt);
+                if( w_errs)
+                {
+                    printf( "NOK - write errors %u\n", w_errs);
+                    errors++;
+                }
+                sqstd_text_writerrelease( wrt);
+                printf( "ans: "); env_dump_buffer( wr_buff, env_get_swrite_len()); printf( "\n");
+            }
 
-        if( test_kind == TEST_CONV)
-        {
-            if( env_get_swrite_len() == test->out_size)
+            if( test_kind == TEST_CONV)
             {
-                if( memcmp( wr_buff, test->out, test->out_size) != 0)
+                if( env_get_swrite_len() == test->out_size)
                 {
-                    printf( "NOK - answer not match\n");
-                    env_dump_buffer( test->out, test->out_size); printf( "\n");
-                    errors++;
-                }
-            }
-            else
-            {
-                printf( "NOK - answer size not match\n");
-                errors++;
-            }
-        }
-        else if( (test_kind == TEST_COPY) || (test_kind == TEST_REV))
-        {
-            int is_cut = test->flags & F_IS_CUT;
-            int in_size = test->in_size;
-            if( is_cut)
-            {
-                if( (int)(buff_pos*sizeof(SQChar)) >= in_size)
-                {
-                    printf( "NOK - no cut chars\n");
-                    errors++;
-                }
-                in_size = sizeof(SQChar)*(in_size/sizeof(SQChar));
-                if( r_errs == 0)
-                {
-                    printf( "NOK - no read error for cut\n");
-                    errors++;
-                }
-            }
-            if( (int)(buff_pos*sizeof(SQChar)) == in_size)
-            {
-                if( test_kind == TEST_COPY)
-                {
-                    if( memcmp( (uint8_t*)buff, test->in, in_size) != 0)
+                    if( memcmp( wr_buff, test->out, test->out_size) != 0)
                     {
-                        printf( "NOK - buffer is not a copy\n");
+                        printf( "NOK - answer not match :");
+                        env_dump_buffer( test->out, test->out_size); printf( "\n");
                         errors++;
                     }
                 }
                 else
                 {
-                    if( revcmp( (uint8_t*)buff, (const uint8_t*)test->in, in_size, char_size) != 0)
+                    printf( "NOK - answer size not match\n");
+                    errors++;
+                }
+            }
+            else if( (test_kind == TEST_COPY) || (test_kind == TEST_REV))
+            {
+                int is_cut = test->flags & F_IS_CUT;
+                int in_size = test->in_size;
+                const uint8_t *test_in = test->in;
+                if( bom_size )
+                {
+                    in_size = test->in_size - bom_size;
+                    test_in = test->in + bom_size;
+                }
+                if( is_cut)
+                {
+                    if( (int)(buff_pos*sizeof(SQChar)) >= in_size)
                     {
-                        printf( "NOK - buffer is not a reverse copy\n");
+                        printf( "NOK - no cut chars\n");
+                        errors++;
+                    }
+                    in_size = sizeof(SQChar)*(in_size/sizeof(SQChar));
+                    if( r_errs == 0)
+                    {
+                        printf( "NOK - no read error for cut\n");
                         errors++;
                     }
                 }
-            }
-            else
-            {
-                printf( "NOK - buffer size not match %u vs %u\n", in_size, buff_pos*sizeof(SQChar));
-                errors++;
+                if( (int)(buff_pos*sizeof(SQChar)) == in_size)
+                {
+                    if( test_kind == TEST_COPY)
+                    {
+                        if( memcmp( (uint8_t*)buff, test_in, in_size) != 0)
+                        {
+                            printf( "NOK - buffer is not a copy :");
+                            env_dump_buffer( test_in, in_size); printf( "\n");
+                            errors++;
+                        }
+                    }
+                    else
+                    {
+                        if( revcmp( (uint8_t*)buff, test_in, in_size, bom_char_size) != 0)
+                        {
+                            printf( "NOK - buffer is not a reverse copy :");
+                            env_dump_buffer( test_in, in_size); printf( "\n");
+                            errors++;
+                        }
+                    }
+                }
+                else
+                {
+                    printf( "NOK - buffer size not match %u vs %u\n", in_size, buff_pos*sizeof(SQChar));
+                    errors++;
+                }
             }
         }
 
@@ -820,7 +885,7 @@ int main( void)
     printf( "Default encoding :%u - %s\n", sqstd_text_defaultenc(), env_enc_name[sqstd_text_defaultenc()]);
 
     //env_dump_allocs = 1;
-
+/*
     printf( "\n==========\n");
     errors += test_sqstd_UTF_to_SQChar();
     printf( "\n==========\n");
@@ -838,7 +903,7 @@ int main( void)
     errors += test_utf( SQTEXTENC_UTF32BE, 4, utf_32be_tests);
     printf( "\n==========\n");
     errors += test_utf( SQTEXTENC_UTF32LE, 4, utf_32le_tests);
-
+*/
     printf( "\n==========\n");
     errors += test_utf_rw( SQTEXTENC_UTF8, 1, utf_8_tests);
 
