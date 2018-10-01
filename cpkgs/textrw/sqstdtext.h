@@ -20,19 +20,22 @@ extern "C" {
 //#define SQTEXTENC_N_UTF16   (SQTEXTENC_UTF16BE | SQTEXTENC_NATIVE)   // Native
 //#define SQTEXTENC_N_UTF32   (SQTEXTENC_UTF32BE | SQTEXTENC_NATIVE)   // Native
 
+typedef struct SQSTDTEXTCV_tag {
+    const void *text;
+    SQUnsignedInteger allocated;
+    SQInteger measure;
+} SQSTDTEXTCV;
 
 SQUIRREL_API SQInteger sqstd_text_encbyname( const SQChar *name);
 SQUIRREL_API const SQChar* sqstd_text_encname( SQInteger enc);
 SQUIRREL_API SQInteger sqstd_text_defaultenc( void);
 SQUIRREL_API SQInteger sqstd_text_nativeenc( SQInteger enc);
 
-SQUIRREL_API SQInteger sqstd_text_fromutf( int encoding, const void *inbuf, SQInteger inbuf_size,
-                 const SQChar **pstr, SQUnsignedInteger *palloc, SQInteger *plen);
-SQUIRREL_API SQInteger sqstd_text_toutf( int encoding, const SQChar *str, SQInteger str_len,
-                const void **pout, SQUnsignedInteger *pout_alloc, SQInteger *pout_size);
-SQUIRREL_API void sqstd_text_release( const void *text, SQUnsignedInteger text_alloc_size);
+SQUIRREL_API SQInteger sqstd_text_fromutf( int encoding, const void *inbuf, SQInteger inbuf_size, SQSTDTEXTCV *textcv);
+SQUIRREL_API SQInteger sqstd_text_toutf( int encoding, const SQChar *str, SQInteger str_len, SQSTDTEXTCV *textcv);
+SQUIRREL_API void sqstd_text_release( SQSTDTEXTCV *textcv);
 
-SQUIRREL_API SQInteger sqstd_text_get(HSQUIRRELVM v, SQInteger idx, int encoding, const void **pout, SQUnsignedInteger *pout_alloc, SQInteger *pout_size);
+SQUIRREL_API SQInteger sqstd_text_get(HSQUIRRELVM v, SQInteger idx, int encoding, SQSTDTEXTCV *textcv);
 SQUIRREL_API SQInteger sqstd_text_push(HSQUIRRELVM v, int encoding, const void *inbuf, SQInteger inbuf_size);
 
 typedef void *SQSTDTEXTRD;

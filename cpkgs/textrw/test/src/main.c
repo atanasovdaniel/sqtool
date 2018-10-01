@@ -116,9 +116,7 @@ const struct data_SQ_to_U_tag data_SQ_to_U_N[] = {
 static int test_sqstd_SQChar_to_UTF_len( int enc)
 {
     const struct data_SQ_to_U_tag data = (enc & SQTEXTENC_NATIVE) ? data_SQ_to_U_N[enc & ~SQTEXTENC_FLAGS] : data_SQ_to_U[enc & ~SQTEXTENC_FLAGS];
-    const void *out;
-    SQUnsignedInteger out_alloc;
-    SQInteger out_size;
+    SQSTDTEXTCV out;
     int errors = 0;
     SQInteger r;
     int expect_copy = 0;
@@ -135,29 +133,29 @@ static int test_sqstd_SQChar_to_UTF_len( int enc)
 
 // str 0
 
-    r = sqstd_text_toutf( enc, 0, 13, &out, &out_alloc, &out_size);
-    printf( "r=%d, out=%p, out_alloc=%u, out_size=%d\n", r, out, out_alloc, out_size);
+    r = sqstd_text_toutf( enc, 0, 13, &out);
+    printf( "r=%d, text=%p, allocated=%u, measure=%d\n", r, out.text, out.allocated, out.measure);
     if( r == 0)
     {
         printf( "NOK - result is 0\n");
         errors++;
     }
-    sqstd_text_release( out, out_alloc);
+    sqstd_text_release( &out);
 
 // str_len 0
 
-    r = sqstd_text_toutf( enc, data.str, 0, &out, &out_alloc, &out_size);
-    printf( "r=%d, out=%p, out_alloc=%u, out_size=%d\n", r, out, out_alloc, out_size);
+    r = sqstd_text_toutf( enc, data.str, 0, &out);
+    printf( "r=%d, text=%p, allocated=%u, measure=%d\n", r, out.text, out.allocated, out.measure);
     if( r != 0)
     {
         printf( "NOK - result is not 0 - %d\n", r);
         errors++;
     }
-    if( out_size == 0)
+    if( out.measure == 0)
     {
         for( i=0; i < data.char_size; i++)
         {
-            if( ((const uint8_t*)out)[i] != 0)
+            if( ((const uint8_t*)(out.text))[i] != 0)
             {
                 printf( "NOK - not empty string\n");
                 errors++;
@@ -170,13 +168,13 @@ static int test_sqstd_SQChar_to_UTF_len( int enc)
         printf( "NOK - answer size not match\n");
         errors++;
     }
-    sqstd_text_release( out, out_alloc);
+    sqstd_text_release( &out);
 
 // str_len not given (use own strlen)
 
-    r = sqstd_text_toutf( enc, data.str, -1, &out, &out_alloc, &out_size);
-    printf( "r=%d, out=%p, out_alloc=%u, out_size=%d\n", r, out, out_alloc, out_size);
-    env_dump_buffer( out, out_size + data.char_size); printf( "\n");
+    r = sqstd_text_toutf( enc, data.str, -1, &out);
+    printf( "r=%d, text=%p, allocated=%u, measure=%d\n", r, out.text, out.allocated, out.measure);
+    env_dump_buffer( out.text, out.measure + data.char_size); printf( "\n");
     if( r != 0)
     {
         printf( "NOK - result is not 0 - %d\n", r);
@@ -184,7 +182,7 @@ static int test_sqstd_SQChar_to_UTF_len( int enc)
     }
     if( expect_copy)
     {
-        if( (const void*)data.str != out)
+        if( (const void*)data.str != out.text)
         {
             printf( "NOK - out is a copy\n");
             errors++;
@@ -192,15 +190,15 @@ static int test_sqstd_SQChar_to_UTF_len( int enc)
     }
     else
     {
-        if( (const void*)data.str == out)
+        if( (const void*)data.str == out.text)
         {
             printf( "NOK - out is not a copy\n");
             errors++;
         }
     }
-    if( out_size == data.ans_size)
+    if( out.measure == data.ans_size)
     {
-        if( memcmp( out, data.answer, data.ans_size + data.char_size) != 0)
+        if( memcmp( out.text, data.answer, data.ans_size + data.char_size) != 0)
         {
             printf( "NOK - answer not match\n");
             errors++;
@@ -211,13 +209,13 @@ static int test_sqstd_SQChar_to_UTF_len( int enc)
         printf( "NOK - answer size not match\n");
         errors++;
     }
-    sqstd_text_release( out, out_alloc);
+    sqstd_text_release( &out);
 
 // str_len given
 
-    r = sqstd_text_toutf( enc, data.str, data.str_len-1, &out, &out_alloc, &out_size);
-    printf( "r=%d, out=%p, out_alloc=%u, out_size=%d\n", r, out, out_alloc, out_size);
-    env_dump_buffer( out, out_size + data.char_size); printf( "\n");
+    r = sqstd_text_toutf( enc, data.str, data.str_len-1, &out);
+    printf( "r=%d, text=%p, allocated=%u, measure=%d\n", r, out.text, out.allocated, out.measure);
+    env_dump_buffer( out.text, out.measure + data.char_size); printf( "\n");
     if( r != 0)
     {
         printf( "NOK - result is not 0 - %d\n", r);
@@ -228,14 +226,14 @@ static int test_sqstd_SQChar_to_UTF_len( int enc)
         printf( "NOK - result is not 0 - %d\n", r);
         errors++;
     }
-    if( (const void*)data.str == out)
+    if( (const void*)data.str == out.text)
     {
         printf( "NOK - out is not a copy\n");
         errors++;
     }
-    if( out_size == (data.ans_size - data.char_size))
+    if( out.measure == (data.ans_size - data.char_size))
     {
-        if( memcmp( out, data.answer_1, data.ans_size) != 0)
+        if( memcmp( out.text, data.answer_1, data.ans_size) != 0)
         {
             printf( "NOK - answer not match\n");
             errors++;
@@ -246,7 +244,7 @@ static int test_sqstd_SQChar_to_UTF_len( int enc)
         printf( "NOK - answer size not match\n");
         errors++;
     }
-    sqstd_text_release( out, out_alloc);
+    sqstd_text_release( &out);
 
     return errors;
 }
@@ -270,9 +268,7 @@ static int test_sqstd_SQChar_to_UTF( void)
 static int test_sqstd_UTF_to_SQChar_len( int enc)
 {
     const struct data_U_to_SQ_tag data = (enc & SQTEXTENC_NATIVE) ? data_U_to_SQ_N[enc & ~SQTEXTENC_FLAGS] : data_U_to_SQ[enc & ~SQTEXTENC_FLAGS];
-    const SQChar *str;
-    SQUnsignedInteger str_alloc;
-    SQInteger str_len;
+    SQSTDTEXTCV str;
     int errors = 0;
     SQInteger r;
     int expect_copy = 0;
@@ -288,27 +284,27 @@ static int test_sqstd_UTF_to_SQChar_len( int enc)
 
 // inbuf 0
 
-    r = sqstd_text_fromutf( enc, 0, 13, &str, &str_alloc, &str_len);
-    printf( "r=%d, str=%p, str_alloc=%u, str_len=%d\n", r, (const void*)str, str_alloc, str_len);
+    r = sqstd_text_fromutf( enc, 0, 13, &str);
+    printf( "r=%d, text=%p, allocated=%u, measure=%d\n", r, str.text, str.allocated, str.measure);
     if( r == 0)
     {
         printf( "NOK - result is 0\n");
         errors++;
     }
-    sqstd_text_release( str, str_alloc);
+    sqstd_text_release( &str);
 
 // inbuf_size 0
 
-    r = sqstd_text_fromutf( enc, data.inbuf, 0, &str, &str_alloc, &str_len);
-    printf( "r=%d, str=%p, str_alloc=%u, str_len=%d\n", r, (const void*)str, str_alloc, str_len);
+    r = sqstd_text_fromutf( enc, data.inbuf, 0, &str);
+    printf( "r=%d, text=%p, allocated=%u, measure=%d\n", r, str.text, str.allocated, str.measure);
     if( r != 0)
     {
         printf( "NOK - result is not 0 - %d\n", r);
         errors++;
     }
-    if( str_len == 0)
+    if( str.measure == 0)
     {
-        if( *str != 0)
+        if( *(const SQChar*)str.text != 0)
         {
             printf( "NOK - not empty string\n");
             errors++;
@@ -319,26 +315,26 @@ static int test_sqstd_UTF_to_SQChar_len( int enc)
         printf( "NOK - answer len not match\n");
         errors++;
     }
-    sqstd_text_release( str, str_alloc);
+    sqstd_text_release( &str);
 
 // inbuf_size given
 
-    r = sqstd_text_fromutf( enc, data.inbuf, data.inbuf_size - data.char_size, &str, &str_alloc, &str_len);
-    printf( "r=%d, str=%p, str_alloc=%u, str_len=%d\n", r, (const void*)str, str_alloc, str_len);
-    env_dump_buffer( str, (str_len+1)*sizeof(SQChar)); printf( "\n");
+    r = sqstd_text_fromutf( enc, data.inbuf, data.inbuf_size - data.char_size, &str);
+    printf( "r=%d, text=%p, allocated=%u, measure=%d\n", r, str.text, str.allocated, str.measure);
+    env_dump_buffer( str.text, (str.measure+1)*sizeof(SQChar)); printf( "\n");
     if( r != 0)
     {
         printf( "NOK - result is not 0 - %d\n", r);
         errors++;
     }
-    if( data.inbuf == (const void*)str)
+    if( data.inbuf == str.text)
     {
         printf( "NOK - str is not a copy\n");
         errors++;
     }
-    if( str_len == (SQInteger)(data.ans_size/sizeof(SQChar) - 1))
+    if( str.measure == (SQInteger)(data.ans_size/sizeof(SQChar) - 1))
     {
-        if( memcmp( str, data.answer, data.ans_size) != 0)
+        if( memcmp( str.text, data.answer, data.ans_size) != 0)
         {
             printf( "NOK - answer not match\n");
             errors++;
@@ -349,13 +345,13 @@ static int test_sqstd_UTF_to_SQChar_len( int enc)
         printf( "NOK - answer len not match\n");
         errors++;
     }
-    sqstd_text_release( str, str_alloc);
+    sqstd_text_release( &str);
 
 // inbuf_size not given (use own strlen)
 
-    r = sqstd_text_fromutf( enc, data.inbuf, -1, &str, &str_alloc, &str_len);
-    printf( "r=%d, str=%p, str_alloc=%u, str_len=%d\n", r, (const void*)str, str_alloc, str_len);
-    env_dump_buffer( str, (str_len+1)*sizeof(SQChar)); printf( "\n");
+    r = sqstd_text_fromutf( enc, data.inbuf, -1, &str);
+    printf( "r=%d, text=%p, allocated=%u, measure=%d\n", r, str.text, str.allocated, str.measure);
+    env_dump_buffer( str.text, (str.measure+1)*sizeof(SQChar)); printf( "\n");
     if( r != 0)
     {
         printf( "NOK - result is not 0 - %d\n", r);
@@ -363,7 +359,7 @@ static int test_sqstd_UTF_to_SQChar_len( int enc)
     }
     if( expect_copy)
     {
-        if( data.inbuf != (const void*)str)
+        if( data.inbuf != str.text)
         {
             printf( "NOK - str is a copy\n");
             errors++;
@@ -371,15 +367,15 @@ static int test_sqstd_UTF_to_SQChar_len( int enc)
     }
     else
     {
-        if( data.inbuf == (const void*)str)
+        if( data.inbuf == str.text)
         {
             printf( "NOK - str is not a copy\n");
             errors++;
         }
     }
-    if( str_len == (SQInteger)(data.ans_size/sizeof(SQChar) - 1))
+    if( str.measure == (SQInteger)(data.ans_size/sizeof(SQChar) - 1))
     {
-        if( memcmp( str, data.answer, data.ans_size) != 0)
+        if( memcmp( str.text, data.answer, data.ans_size) != 0)
         {
             printf( "NOK - answer not match\n");
             errors++;
@@ -390,7 +386,7 @@ static int test_sqstd_UTF_to_SQChar_len( int enc)
         printf( "NOK - answer len not match\n");
         errors++;
     }
-    sqstd_text_release( str, str_alloc);
+    sqstd_text_release( &str);
 
     return errors;
 }
@@ -606,9 +602,7 @@ static int test_utf( int enc, int char_size, const struct utf_test *test)
     int test_kind = get_test_kind( enc);
     while( test->name)
     {
-        const SQChar *str;
-        SQUnsignedInteger str_alloc;
-        SQInteger str_len;
+        SQSTDTEXTCV str;
         SQInteger r;
 
         if( test->flags & F_IS_BOM)
@@ -618,31 +612,29 @@ static int test_utf( int enc, int char_size, const struct utf_test *test)
         }
         printf( "test %s\n", test->name);
 
-        r = sqstd_text_fromutf( enc, test->in, test->in_size, &str, &str_alloc, &str_len);
-        printf( "r=%d, str=%p, str_alloc=%u, str_len=%d\n", r, (const void*)str, str_alloc, str_len);
-        env_dump_buffer( str, (str_len+1)*sizeof(SQChar)); printf( "\n");
+        r = sqstd_text_fromutf( enc, test->in, test->in_size, &str);
+        printf( "str: r=%d, text=%p, allocated=%u, measure=%d\n", r, str.text, str.allocated, str.measure);
+        env_dump_buffer( str.text, (str.measure+1)*sizeof(SQChar)); printf( "\n");
         if( test_kind == TEST_CONV)
         {
-            const void *out;
-            SQUnsignedInteger out_alloc;
-            SQInteger out_size;
+            SQSTDTEXTCV out;
 
             if( r != test->r1)
             {
                 printf( "NOK - sqstd_text_fromutf returns %d\n", r);
                 errors++;
             }
-            r = sqstd_text_toutf( enc, str, str_len, &out, &out_alloc, &out_size);
-            printf( "r=%d, out=%p, out_alloc=%u, out_size=%d\n", r, out, out_alloc, out_size);
-            env_dump_buffer( out, out_size + char_size); printf( "\n");
+            r = sqstd_text_toutf( enc, (const SQChar*)str.text, str.measure, &out);
+            printf( "out: r=%d, text=%p, allocated=%u, measure=%d\n", r, out.text, out.allocated, out.measure);
+            env_dump_buffer( out.text, out.measure + char_size); printf( "\n");
             if( r != test->r2)
             {
                 printf( "NOK - sqstd_text_toutf returns %d\n", r);
                 errors++;
             }
-            if( out_size == test->out_size)
+            if( out.measure == test->out_size)
             {
-                if( memcmp( out, test->out, test->out_size) != 0)
+                if( memcmp( out.text, test->out, test->out_size) != 0)
                 {
                     printf( "NOK - answer not match\n");
                     errors++;
@@ -653,7 +645,7 @@ static int test_utf( int enc, int char_size, const struct utf_test *test)
                 printf( "NOK - answer size not match\n");
                 errors++;
             }
-            sqstd_text_release( out, out_alloc);
+            sqstd_text_release( &out);
         }
         else if( (test_kind == TEST_COPY) || (test_kind == TEST_REV))
         {
@@ -666,7 +658,7 @@ static int test_utf( int enc, int char_size, const struct utf_test *test)
                 printf( "NOK - sqstd_text_fromutf returns %d\n", r);
                 errors++;
             }
-            if( (const void*)str == test->in)
+            if( str.text == test->in)
             {
                 printf( "NOK - str is not a copy\n");
                 errors++;
@@ -675,7 +667,7 @@ static int test_utf( int enc, int char_size, const struct utf_test *test)
             {
                 in_size = sizeof(SQChar)*(in_size/sizeof(SQChar));
             }
-            if( str_len != (SQInteger)(in_size/sizeof(SQChar)))
+            if( str.measure != (SQInteger)(in_size/sizeof(SQChar)))
             {
                 printf( "NOK - str_len not match\n");
                 errors++;
@@ -684,7 +676,7 @@ static int test_utf( int enc, int char_size, const struct utf_test *test)
             {
                 if( test_kind == TEST_COPY)
                 {
-                    if( memcmp( str, test->in, in_size) != 0)
+                    if( memcmp( str.text, test->in, in_size) != 0)
                     {
                         printf( "NOK - answer not match\n");
                         errors++;
@@ -692,20 +684,20 @@ static int test_utf( int enc, int char_size, const struct utf_test *test)
                 }
                 else
                 {
-                    if( revcmp( (const uint8_t*)str, (const uint8_t*)test->in, in_size, char_size) != 0)
+                    if( revcmp( (const uint8_t*)str.text, (const uint8_t*)test->in, in_size, char_size) != 0)
                     {
                         printf( "NOK - answer not match\n");
                         errors++;
                     }
                 }
-                if( str[str_len] != 0)
+                if( ((const SQChar*)str.text)[str.measure] != 0)
                 {
                     printf( "NOK - answer is not truncated\n");
                     errors++;
                 }
             }
         }
-        sqstd_text_release( str, str_alloc);
+        sqstd_text_release( &str);
 
         test++;
     }

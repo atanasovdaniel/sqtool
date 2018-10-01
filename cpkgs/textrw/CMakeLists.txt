@@ -1,2 +1,2 @@
 
-add_sqpackage_lib( textrw SOURCES sqstdtextrw.cpp)
+add_sqpackage_lib( textrw SOURCES sqstdtext.cpp)

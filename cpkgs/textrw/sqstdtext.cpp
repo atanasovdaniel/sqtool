@@ -686,8 +686,7 @@ public:
 
     int _errors;
 
-    SQInteger Convert( const uint8_t *inbuf, const uint8_t* const inbuf_end,
-                 uint8_t **poutbuf, uint8_t **poutbuf_end, size_t *poutbuf_alloc)
+    SQInteger Convert( const uint8_t *inbuf, const uint8_t* const inbuf_end, SQSTDTEXTCV *textcv)
     {
         int r = CV_OK;
         _inbuf = inbuf;
@@ -712,18 +711,19 @@ public:
         }
         size_t out_len = _out_ptr - _output;
         Append( 0);
-        *poutbuf_end = _output + out_len;
-        *poutbuf = _output;
-        *poutbuf_alloc = _out_alloc;
+        textcv->text = _output;
+        textcv->allocated = _out_alloc;
+        textcv->measure = out_len;
         return ((r == CV_OK) && !_errors) ? SQ_OK : SQ_ERROR;
     }
 };
 
-void sqstd_text_release( const void *text, SQUnsignedInteger text_alloc_size)
+void sqstd_text_release( SQSTDTEXTCV *textcv)
 {
-    if( text_alloc_size != 0) {
-        void *nctext = const_cast<void*>(text);
-        sq_free( nctext, text_alloc_size);
+    if( textcv->allocated != 0) {
+        void *nctext = const_cast<void*>(textcv->text);
+        sq_free( nctext, textcv->allocated);
+        textcv->allocated = 0;
     }
 }
 
@@ -731,29 +731,29 @@ void sqstd_text_release( const void *text, SQUnsignedInteger text_alloc_size)
     SQChar to SQChar
 ------------------------------------ */
 
-static SQInteger sqstd_SQChar_to_SQChar( const SQChar *str, SQInteger str_size, const SQChar **pout, SQUnsignedInteger *pout_alloc, SQInteger *pout_size)
+static SQInteger sqstd_SQChar_to_SQChar( const SQChar *str, SQInteger str_size, SQSTDTEXTCV *textcv)
 {
     if( str_size == -1) {
         str_size = cvSQChar().strsize( (const uint8_t*)str);
-        *pout_alloc = 0;
-        *pout = str;
-        if( pout_size) *pout_size = str_size;
+        textcv->text = str;
+        textcv->allocated = 0;
+        textcv->measure = str_size;
         return SQ_OK;
     }
     else {
         int padding = str_size % sizeof(SQChar);
         str_size -= padding;      // turnicate str_size to whole number of SQChars
-        *pout_alloc = str_size + sizeof(SQChar);
-        SQChar *out = (SQChar*)sq_malloc( *pout_alloc);
-        *pout = out;
+        textcv->allocated = str_size + sizeof(SQChar);
+        SQChar *out = (SQChar*)sq_malloc( textcv->allocated);
+        textcv->text = out;
         memcpy( out, str, str_size);
         out[str_size / sizeof(SQChar)] = _SC('\0');
-        if( pout_size) *pout_size = str_size;
+        textcv->measure = str_size;
         return padding ? SQ_ERROR : SQ_OK;
     }
 }
 
-static SQInteger sqstd_SQChar_to_SQCharREV( const SQChar *str, SQInteger str_size, const SQChar **pout, SQUnsignedInteger *pout_alloc, SQInteger *pout_size)
+static SQInteger sqstd_SQChar_to_SQCharREV( const SQChar *str, SQInteger str_size, SQSTDTEXTCV *textcv)
 {
     int padding = 0;
     if( str_size == -1) {
@@ -763,9 +763,10 @@ static SQInteger sqstd_SQChar_to_SQCharREV( const SQChar *str, SQInteger str_siz
         padding = str_size % sizeof(SQChar);
         str_size -= padding;      // turnicate str_size to whole number of SQChars
     }
-    *pout_alloc = str_size + sizeof(SQChar);
-    SQChar *out = (SQChar*)sq_malloc( *pout_alloc);
-    *pout = out;
+    textcv->allocated = str_size + sizeof(SQChar);
+    SQChar *out = (SQChar*)sq_malloc( textcv->allocated);
+    textcv->text = out;
+    textcv->measure = str_size;
     SQInteger str_len = str_size / sizeof(SQChar);
     out[str_len] = _SC('\0');
     while( str_len) {
@@ -779,7 +780,6 @@ static SQInteger sqstd_SQChar_to_SQCharREV( const SQChar *str, SQInteger str_siz
         str++;
         str_len--;
     }
-    if( pout_size) *pout_size = str_size;
     return padding ? SQ_ERROR : SQ_OK;
 }
 
@@ -787,36 +787,31 @@ static SQInteger sqstd_SQChar_to_SQCharREV( const SQChar *str, SQInteger str_siz
     UTFx to SQChar
 ------------------------------------ */
 
-static SQInteger UTF_to_SQChar( const void *inbuf, SQInteger inbuf_size,
-                 const SQChar **pstr, SQUnsignedInteger *palloc, SQInteger *plen, const cv_t &cv)
+static SQInteger UTF_to_SQChar( const void *inbuf, SQInteger inbuf_size, SQSTDTEXTCV *textcv, const cv_t &cv)
 {
     if( inbuf_size == -1) {
         inbuf_size = cv.strsize( (const uint8_t*)inbuf);
     }
     cvTextAlloc cvt( cv, cvSQChar());
-    SQChar *outbuf_end;
-    size_t  outbuf_alloc;
-    int r = cvt.Convert( (const uint8_t*)inbuf, (const uint8_t*)inbuf + inbuf_size, (uint8_t**)pstr, (uint8_t**)&outbuf_end, &outbuf_alloc);
-    if( plen) *plen = outbuf_end - *pstr;
-    *palloc = outbuf_alloc;
+    int r = cvt.Convert( (const uint8_t*)inbuf, (const uint8_t*)inbuf + inbuf_size, textcv);
+    textcv->measure /= sizeof(SQChar);
     return r;
 }
 
-SQInteger sqstd_text_fromutf( int encoding, const void *inbuf, SQInteger inbuf_size,
-                 const SQChar **pstr, SQUnsignedInteger *palloc, SQInteger *plen)
+SQInteger sqstd_text_fromutf( int encoding, const void *inbuf, SQInteger inbuf_size, SQSTDTEXTCV *textcv)
 {
     if( inbuf) {
         internal_encoding_t enc_id = get_int_encoding( encoding);
         switch( enc_id)
         {
             case ENC_SQCHAR: {
-                SQInteger r = sqstd_SQChar_to_SQChar( (const SQChar*)inbuf, inbuf_size, pstr, palloc, plen);
-                *plen /= sizeof(SQChar);
+                SQInteger r = sqstd_SQChar_to_SQChar( (const SQChar*)inbuf, inbuf_size, textcv);
+                textcv->measure /= sizeof(SQChar);
                 return r;
             }
             case ENC_SQCHAR_REV: {
-                SQInteger r =  sqstd_SQChar_to_SQCharREV( (const SQChar*)inbuf, inbuf_size, pstr, palloc, plen);
-                *plen /= sizeof(SQChar);
+                SQInteger r =  sqstd_SQChar_to_SQCharREV( (const SQChar*)inbuf, inbuf_size, textcv);
+                textcv->measure /= sizeof(SQChar);
                 return r;
             }
             case ENC_UTF8:
@@ -825,14 +820,14 @@ SQInteger sqstd_text_fromutf( int encoding, const void *inbuf, SQInteger inbuf_s
             case ENC_UTF32:
             case ENC_UTF32_REV:
             case ENC_ASCII:
-                return UTF_to_SQChar( inbuf, inbuf_size, pstr, palloc, plen, *cv_list[enc_id]);
+                return UTF_to_SQChar( inbuf, inbuf_size, textcv, *cv_list[enc_id]);
             default:
                 break;
         }
     }
-    *pstr = 0;
-    *palloc = 0;
-    *plen = 0;
+    textcv->text = 0;
+    textcv->allocated = 0;
+    textcv->measure = 0;
     return -1;
 }
 
@@ -840,25 +835,18 @@ SQInteger sqstd_text_fromutf( int encoding, const void *inbuf, SQInteger inbuf_s
     SQChar to UTFx
 ------------------------------------ */
 
-static SQInteger SQChar_to_UTF( const SQChar *str, SQInteger str_size, const void **pout, SQUnsignedInteger *pout_alloc, SQInteger *pout_size, const cv_t &cv)
+static SQInteger SQChar_to_UTF( const SQChar *str, SQInteger str_size, SQSTDTEXTCV *textcv, const cv_t &cv)
 {
     cvTextAlloc cvt( cvSQChar(), cv);
-    uint8_t *out;
-    uint8_t *outbuf_end;
-    size_t  outbuf_alloc;
     int r;
     if( str_size == -1) {
         str_size = cvSQChar().strsize( (const uint8_t*)str);
     }
-    r = cvt.Convert( (const uint8_t*)str, (const uint8_t*)str + str_size, &out, &outbuf_end, &outbuf_alloc);
-    *pout = out;
-    if( pout_size) *pout_size = outbuf_end - out;
-    *pout_alloc = outbuf_alloc;
+    r = cvt.Convert( (const uint8_t*)str, (const uint8_t*)str + str_size, textcv);
     return r;
 }
 
-SQInteger sqstd_text_toutf( int encoding, const SQChar *str, SQInteger str_len,
-                                const void **pout, SQUnsignedInteger *pout_alloc, SQInteger *pout_size)
+SQInteger sqstd_text_toutf( int encoding, const SQChar *str, SQInteger str_len, SQSTDTEXTCV *textcv)
 {
     if( str) {
         SQInteger str_size = str_len;
@@ -869,23 +857,23 @@ SQInteger sqstd_text_toutf( int encoding, const SQChar *str, SQInteger str_len,
         switch( enc_id)
         {
             case ENC_SQCHAR:
-                return sqstd_SQChar_to_SQChar( (const SQChar*)str, str_size, (const SQChar**)pout, pout_alloc, pout_size);
+                return sqstd_SQChar_to_SQChar( (const SQChar*)str, str_size, textcv);
             case ENC_SQCHAR_REV:
-                return sqstd_SQChar_to_SQCharREV( (const SQChar*)str, str_size, (const SQChar**)pout, pout_alloc, pout_size);
+                return sqstd_SQChar_to_SQCharREV( (const SQChar*)str, str_size, textcv);
             case ENC_UTF8:
             case ENC_UTF16:
             case ENC_UTF16_REV:
             case ENC_UTF32:
             case ENC_UTF32_REV:
             case ENC_ASCII:
-                return SQChar_to_UTF( str, str_size, pout, pout_alloc, pout_size, *cv_list[enc_id]);
+                return SQChar_to_UTF( str, str_size, textcv, *cv_list[enc_id]);
             default:
                 break;
         }
     }
-    *pout = 0;
-    *pout_alloc = 0;
-    *pout_size = 0;
+    textcv->text = 0;
+    textcv->allocated = 0;
+    textcv->measure = 0;
     return -1;
 }
 
@@ -894,23 +882,21 @@ SQInteger sqstd_text_toutf( int encoding, const SQChar *str, SQInteger str_len,
 ==================================== */
 
 #ifndef TEST_WO_SQAPI
-SQInteger sqstd_text_get(HSQUIRRELVM v, SQInteger idx, int encoding, const void **pout, SQUnsignedInteger *pout_alloc, SQInteger *pout_size)
+SQInteger sqstd_text_get(HSQUIRRELVM v, SQInteger idx, int encoding, SQSTDTEXTCV *textcv)
 {
     const SQChar *str;
     SQInteger str_len;
     sq_getstringandsize(v,idx,&str,&str_len);
-    sqstd_text_toutf( encoding, str, str_len, pout, pout_alloc, pout_size);
+    sqstd_text_toutf( encoding, str, str_len, textcv);
     return 0;
 }
 
 SQInteger sqstd_push_UTF(HSQUIRRELVM v, int encoding, const void *inbuf, SQInteger inbuf_size)
 {
-    const SQChar *str;
-    SQUnsignedInteger str_alloc;
-    SQInteger str_len;
-    SQInteger r = sqstd_text_fromutf( encoding, inbuf, inbuf_size, &str, &str_alloc, &str_len);
-    sq_pushstring(v, str, str_len);
-    sqstd_text_release( str, str_alloc);
+    SQSTDTEXTCV textcv;
+    SQInteger r = sqstd_text_fromutf( encoding, inbuf, inbuf_size, &textcv);
+    sq_pushstring(v, textcv->text, textcv->measure);
+    sqstd_text_release( &textcv);
     return r;
 }
 #endif // TEST_WO_SQAPI
