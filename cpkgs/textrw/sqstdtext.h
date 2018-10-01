@@ -7,13 +7,19 @@ extern "C" {
 #endif
 
 #define SQTEXTENC_UTF8      0
-#define SQTEXTENC_N_UTF16   1   // Native
-#define SQTEXTENC_UTF16BE   2
-#define SQTEXTENC_UTF16LE   3
-#define SQTEXTENC_N_UTF32   4   // Native
-#define SQTEXTENC_UTF32BE   5
-#define SQTEXTENC_UTF32LE   6
-#define SQTEXTENC_ASCII     7
+#define SQTEXTENC_UTF16BE   1
+#define SQTEXTENC_UTF16LE   2
+#define SQTEXTENC_UTF32BE   3
+#define SQTEXTENC_UTF32LE   4
+#define SQTEXTENC_ASCII     5
+
+#define SQTEXTENC_NATIVE    0x40
+#define SQTEXTENC_STRICT    0x80
+#define SQTEXTENC_FLAGS     (SQTEXTENC_NATIVE | SQTEXTENC_STRICT)
+
+//#define SQTEXTENC_N_UTF16   (SQTEXTENC_UTF16BE | SQTEXTENC_NATIVE)   // Native
+//#define SQTEXTENC_N_UTF32   (SQTEXTENC_UTF32BE | SQTEXTENC_NATIVE)   // Native
+
 
 SQUIRREL_API SQInteger sqstd_text_encbyname( const SQChar *name);
 SQUIRREL_API const SQChar* sqstd_text_encname( SQInteger enc);

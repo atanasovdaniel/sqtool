@@ -84,6 +84,7 @@
 			<Add directory="../../textrw" />
 			<Add directory="../../../squirrel/include" />
 		</Compiler>
+		<Unit filename="../../../squirrel/include/sqconfig.h" />
 		<Unit filename="../../../squirrel/include/sqstdstream.h" />
 		<Unit filename="../../../squirrel/include/squirrel.h" />
 		<Unit filename="../sqstdtext.cpp" />

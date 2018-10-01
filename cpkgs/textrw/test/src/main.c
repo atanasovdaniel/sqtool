@@ -14,17 +14,24 @@
 #define ALIGN_2( _x)    _x __attribute__ ((aligned (2)))
 #define ALIGN_4( _x)    _x __attribute__ ((aligned (4)))
 
-const char *env_enc_name[] = {
-    [SQTEXTENC_UTF8] = "UTF8",
-    [SQTEXTENC_N_UTF16] = "NATIVE-UTF-16",
-    [SQTEXTENC_UTF16BE] = "UTF-16BE",
-    [SQTEXTENC_UTF16LE] = "UTF-16LE",
-    [SQTEXTENC_N_UTF32] = "NATIVE-UTF-32",
-    [SQTEXTENC_UTF32BE] = "UTF-32BE",
-    [SQTEXTENC_UTF32LE] = "UTF-32LE",
-    [SQTEXTENC_ASCII] = "ASCII",
-};
+const char *env_get_enc_name( int encoding)
+{
+    static const char *env_enc_name[] = {
+        [SQTEXTENC_UTF8] = "UTF8",
+        [SQTEXTENC_UTF16BE] = "UTF-16BE",
+        [SQTEXTENC_UTF16LE] = "UTF-16LE",
+        [SQTEXTENC_UTF32BE] = "UTF-32BE",
+        [SQTEXTENC_UTF32LE] = "UTF-32LE",
+        [SQTEXTENC_ASCII] = "ASCII",
+    };
 
+    if( encoding & SQTEXTENC_NATIVE)
+    {
+        encoding = sqstd_text_nativeenc( encoding);
+    }
+
+    return env_enc_name[ encoding & ~SQTEXTENC_FLAGS];
+}
 
 const uint8_t str_8[] = { 'H', 'E', 'L', 'L', 'O', 0 };
 const uint8_t str_8_1[] = { 'H', 'E', 'L', 'L', 0 };
@@ -61,15 +68,21 @@ const struct data_U_to_SQ_tag
 } data_U_to_SQ[] = {
 #define U2SQ( _enc, _inb, _incs, _ans)     [_enc] = { _inb, sizeof(_inb), _incs, _ans, _ans##_1, sizeof(_ans)},
     U2SQ( SQTEXTENC_UTF8, str_8, 1, str_SQ)
-    U2SQ( SQTEXTENC_N_UTF16, str_N16, 2, str_SQ)
     U2SQ( SQTEXTENC_UTF16BE, str_16B, 2, str_SQ)
     U2SQ( SQTEXTENC_UTF16LE, str_16L, 2, str_SQ)
-    U2SQ( SQTEXTENC_N_UTF32, str_N32, 4, str_SQ)
     U2SQ( SQTEXTENC_UTF32BE, str_32B, 4, str_SQ)
     U2SQ( SQTEXTENC_UTF32LE, str_32L, 4, str_SQ)
     U2SQ( SQTEXTENC_ASCII, str_8, 1, str_SQ)
-#undef U2SQ
 };
+const struct data_U_to_SQ_tag data_U_to_SQ_N[] = {
+    U2SQ( SQTEXTENC_UTF8, str_8, 1, str_SQ)
+    U2SQ( SQTEXTENC_UTF16BE, str_N16, 2, str_SQ)
+    U2SQ( SQTEXTENC_UTF16LE, str_N16, 2, str_SQ)
+    U2SQ( SQTEXTENC_UTF32BE, str_N32, 4, str_SQ)
+    U2SQ( SQTEXTENC_UTF32LE, str_N32, 4, str_SQ)
+    U2SQ( SQTEXTENC_ASCII, str_8, 1, str_SQ)
+};
+#undef U2SQ
 
 //sqstd_text_toutf( int encoding, const SQChar *str, SQInteger str_len,
 //                const void **pout, SQUnsignedInteger *pout_alloc, SQInteger *pout_size);
@@ -82,21 +95,27 @@ const struct data_SQ_to_U_tag
     const void *answer_1;
     SQInteger ans_size;
 } data_SQ_to_U[] = {
-    #define SQ2U( _enc, _str, _anscs, _ans)   [_enc] = { _str, sizeof(_str)/sizeof(SQChar)-1, _anscs, _ans, _ans##_1, sizeof(_ans)-_anscs},
+#define SQ2U( _enc, _str, _anscs, _ans)   [_enc] = { _str, sizeof(_str)/sizeof(SQChar)-1, _anscs, _ans, _ans##_1, sizeof(_ans)-_anscs},
     SQ2U( SQTEXTENC_UTF8, str_SQ, 1, str_8)
-    SQ2U( SQTEXTENC_N_UTF16, str_SQ, 2, str_N16)
     SQ2U( SQTEXTENC_UTF16BE, str_SQ, 2, str_16B)
     SQ2U( SQTEXTENC_UTF16LE, str_SQ, 2, str_16L)
-    SQ2U( SQTEXTENC_N_UTF32, str_SQ, 4, str_N32)
     SQ2U( SQTEXTENC_UTF32BE, str_SQ, 4, str_32B)
     SQ2U( SQTEXTENC_UTF32LE, str_SQ, 4, str_32L)
     SQ2U( SQTEXTENC_ASCII, str_SQ, 1, str_8)
-    #undef SQ2U
 };
+const struct data_SQ_to_U_tag data_SQ_to_U_N[] = {
+    SQ2U( SQTEXTENC_UTF8, str_SQ, 1, str_8)
+    SQ2U( SQTEXTENC_UTF16BE, str_SQ, 2, str_N16)
+    SQ2U( SQTEXTENC_UTF16LE, str_SQ, 2, str_N16)
+    SQ2U( SQTEXTENC_UTF32BE, str_SQ, 4, str_N32)
+    SQ2U( SQTEXTENC_UTF32LE, str_SQ, 4, str_N32)
+    SQ2U( SQTEXTENC_ASCII, str_SQ, 1, str_8)
+};
+#undef SQ2U
 
 static int test_sqstd_SQChar_to_UTF_len( int enc)
 {
-    const struct data_SQ_to_U_tag data = data_SQ_to_U[enc];
+    const struct data_SQ_to_U_tag data = (enc & SQTEXTENC_NATIVE) ? data_SQ_to_U_N[enc & ~SQTEXTENC_FLAGS] : data_SQ_to_U[enc & ~SQTEXTENC_FLAGS];
     const void *out;
     SQUnsignedInteger out_alloc;
     SQInteger out_size;
@@ -106,12 +125,13 @@ static int test_sqstd_SQChar_to_UTF_len( int enc)
     int i;
 
     if( (sqstd_text_defaultenc() == enc) ||
-        (((enc == SQTEXTENC_N_UTF16) || (enc == SQTEXTENC_N_UTF32)) && (sqstd_text_nativeenc(enc) == sqstd_text_defaultenc())) )
+        //(((enc == SQTEXTENC_N_UTF16) || (enc == SQTEXTENC_N_UTF32)) && (sqstd_text_nativeenc(enc) == sqstd_text_defaultenc())) )
+        ((enc & SQTEXTENC_NATIVE) && (sqstd_text_nativeenc(enc) == sqstd_text_defaultenc())) )
     {
         expect_copy = 1;
     }
 
-    printf( "\n======\tsqstd_text_toutf %s%s\n", env_enc_name[enc], expect_copy ? " - copy": "");
+    printf( "\n======\tsqstd_text_toutf %s%s\n", env_get_enc_name(enc), expect_copy ? " - copy": "");
 
 // str 0
 
@@ -236,10 +256,10 @@ static int test_sqstd_SQChar_to_UTF( void)
     int errors = 0;
 
     errors += test_sqstd_SQChar_to_UTF_len( SQTEXTENC_UTF8);
-    errors += test_sqstd_SQChar_to_UTF_len( SQTEXTENC_N_UTF16);
+    errors += test_sqstd_SQChar_to_UTF_len( SQTEXTENC_UTF16BE | SQTEXTENC_NATIVE);
     errors += test_sqstd_SQChar_to_UTF_len( SQTEXTENC_UTF16BE);
     errors += test_sqstd_SQChar_to_UTF_len( SQTEXTENC_UTF16LE);
-    errors += test_sqstd_SQChar_to_UTF_len( SQTEXTENC_N_UTF32);
+    errors += test_sqstd_SQChar_to_UTF_len( SQTEXTENC_UTF32BE | SQTEXTENC_NATIVE);
     errors += test_sqstd_SQChar_to_UTF_len( SQTEXTENC_UTF32BE);
     errors += test_sqstd_SQChar_to_UTF_len( SQTEXTENC_UTF32LE);
     errors += test_sqstd_SQChar_to_UTF_len( SQTEXTENC_ASCII);
@@ -249,7 +269,7 @@ static int test_sqstd_SQChar_to_UTF( void)
 
 static int test_sqstd_UTF_to_SQChar_len( int enc)
 {
-    const struct data_U_to_SQ_tag data = data_U_to_SQ[enc];
+    const struct data_U_to_SQ_tag data = (enc & SQTEXTENC_NATIVE) ? data_U_to_SQ_N[enc & ~SQTEXTENC_FLAGS] : data_U_to_SQ[enc & ~SQTEXTENC_FLAGS];
     const SQChar *str;
     SQUnsignedInteger str_alloc;
     SQInteger str_len;
@@ -258,12 +278,13 @@ static int test_sqstd_UTF_to_SQChar_len( int enc)
     int expect_copy = 0;
 
     if( (sqstd_text_defaultenc() == enc) ||
-        (((enc == SQTEXTENC_N_UTF16) || (enc == SQTEXTENC_N_UTF32)) && (sqstd_text_nativeenc(enc) == sqstd_text_defaultenc())) )
+        //(((enc == SQTEXTENC_N_UTF16) || (enc == SQTEXTENC_N_UTF32)) && (sqstd_text_nativeenc(enc) == sqstd_text_defaultenc())) )
+        ((enc & SQTEXTENC_NATIVE) && (sqstd_text_nativeenc(enc) == sqstd_text_defaultenc())) )
     {
         expect_copy = 1;
     }
 
-    printf( "\n======\tsqstd_text_fromutf %s%s\n", env_enc_name[enc], expect_copy ? " - copy" : "");
+    printf( "\n======\tsqstd_text_fromutf %s%s\n", env_get_enc_name(enc), expect_copy ? " - copy" : "");
 
 // inbuf 0
 
@@ -379,10 +400,10 @@ static int test_sqstd_UTF_to_SQChar( void)
     int errors = 0;
 
     errors += test_sqstd_UTF_to_SQChar_len( SQTEXTENC_UTF8);
-    errors += test_sqstd_UTF_to_SQChar_len( SQTEXTENC_N_UTF16);
+    errors += test_sqstd_UTF_to_SQChar_len( SQTEXTENC_UTF16BE | SQTEXTENC_NATIVE);
     errors += test_sqstd_UTF_to_SQChar_len( SQTEXTENC_UTF16BE);
     errors += test_sqstd_UTF_to_SQChar_len( SQTEXTENC_UTF16LE);
-    errors += test_sqstd_UTF_to_SQChar_len( SQTEXTENC_N_UTF32);
+    errors += test_sqstd_UTF_to_SQChar_len( SQTEXTENC_UTF32BE | SQTEXTENC_NATIVE);
     errors += test_sqstd_UTF_to_SQChar_len( SQTEXTENC_UTF32BE);
     errors += test_sqstd_UTF_to_SQChar_len( SQTEXTENC_UTF32LE);
     errors += test_sqstd_UTF_to_SQChar_len( SQTEXTENC_ASCII);
@@ -581,7 +602,7 @@ static int test_utf( int enc, int char_size, const struct utf_test *test)
 {
     //const struct utf_8_test *test = utf_8_tests;
     int errors = 0;
-    printf( "\n======\tsqstd_text_fromutf --> sqstd_text_toutf %s\n", env_enc_name[enc]);
+    printf( "\n======\tsqstd_text_fromutf --> sqstd_text_toutf %s\n", env_get_enc_name(enc));
     int test_kind = get_test_kind( enc);
     while( test->name)
     {
@@ -695,7 +716,7 @@ static int test_utf_rw( int enc, int char_size, const struct utf_test *test)
 {
     int errors = 0;
     SQSTREAM stream = (void*)0x1234;
-    printf( "\n======\tsqstd_text_reader --> sqstd_text_writer %s\n", env_enc_name[enc]);
+    printf( "\n======\tsqstd_text_reader --> sqstd_text_writer %s\n", env_get_enc_name(enc));
     while( test->name)
     {
         SQChar buff[1024];
@@ -720,19 +741,17 @@ static int test_utf_rw( int enc, int char_size, const struct utf_test *test)
             if( test->r2 >= 0)
             {
                 test_kind = get_test_kind( test->r2);
-                switch( test->r2)
+                switch( test->r2 & ~SQTEXTENC_FLAGS)
                 {
                     case SQTEXTENC_UTF8:
                         bom_size = 3;
                         bom_char_size = 1;
                         break;
-                    case SQTEXTENC_N_UTF16:
                     case SQTEXTENC_UTF16BE:
                     case SQTEXTENC_UTF16LE:
                         bom_size = 2;
                         bom_char_size = 2;
                         break;
-                    case SQTEXTENC_N_UTF32:
                     case SQTEXTENC_UTF32BE:
                     case SQTEXTENC_UTF32LE:
                         bom_size = 4;
@@ -882,10 +901,10 @@ int main( void)
 {
     int errors = 0;
 
-    printf( "Default encoding :%u - %s\n", sqstd_text_defaultenc(), env_enc_name[sqstd_text_defaultenc()]);
+    printf( "Default encoding :%u - %s\n", sqstd_text_defaultenc(), env_get_enc_name(sqstd_text_defaultenc()));
 
     //env_dump_allocs = 1;
-/*
+
     printf( "\n==========\n");
     errors += test_sqstd_UTF_to_SQChar();
     printf( "\n==========\n");
@@ -903,7 +922,7 @@ int main( void)
     errors += test_utf( SQTEXTENC_UTF32BE, 4, utf_32be_tests);
     printf( "\n==========\n");
     errors += test_utf( SQTEXTENC_UTF32LE, 4, utf_32le_tests);
-*/
+
     printf( "\n==========\n");
     errors += test_utf_rw( SQTEXTENC_UTF8, 1, utf_8_tests);
 

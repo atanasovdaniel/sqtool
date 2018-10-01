@@ -43,6 +43,10 @@ THE SOFTWARE.
 
 #define CBUFF_SIZE  16
 
+#define IS_LE( _var) \
+    bool _var; \
+    { const uint16_t tmp = 1; _var = (*(const uint8_t*)&tmp == 1) ? true : false; }
+
 /*
     returns:
         0 - CV_OK       - Code read from buffer
@@ -420,10 +424,8 @@ static const cv_t &cvSQChar( void)
 
 static const SQChar *__NAMES_ASCII[] = { _SC("ASCII"), NULL };
 static const SQChar *__NAMES_UTF_8[] = { _SC("UTF-8"), NULL };
-static const SQChar *__NAMES_N_UTF_16[] = { _SC("NATIVE-UTF-16"), NULL };
 static const SQChar *__NAMES_UTF_16BE[] = { _SC("UTF-16BE"), _SC("UTF-16"), _SC("UCS-2BE"), NULL };
 static const SQChar *__NAMES_UTF_16LE[] = { _SC("UTF-16LE"), _SC("UCS-2"), _SC("UCS-2LE"), NULL };
-static const SQChar *__NAMES_N_UTF_32[] = { _SC("NATIVE-UTF-32"), NULL };
 static const SQChar *__NAMES_UTF_32BE[] = { _SC("UTF-32BE"), _SC("UTF-32"), _SC("UCS-4BE"), NULL };
 static const SQChar *__NAMES_UTF_32LE[] = { _SC("UTF-32LE"), _SC("UCS-4"), _SC("UCS-4LE"), NULL };
 
@@ -433,10 +435,8 @@ static const struct enc_names
     const SQChar **names;
 } encodings_list[] = {
 	{ SQTEXTENC_UTF8, __NAMES_UTF_8 },
-	{ SQTEXTENC_N_UTF16, __NAMES_N_UTF_16 },
 	{ SQTEXTENC_UTF16BE, __NAMES_UTF_16BE },
 	{ SQTEXTENC_UTF16LE, __NAMES_UTF_16LE },
-	{ SQTEXTENC_N_UTF32, __NAMES_N_UTF_32 },
 	{ SQTEXTENC_UTF32BE, __NAMES_UTF_32BE },
 	{ SQTEXTENC_UTF32LE, __NAMES_UTF_32LE },
 	{ SQTEXTENC_ASCII, __NAMES_ASCII },
@@ -462,12 +462,28 @@ static int compare_encoding_name( const SQChar *iname, const SQChar *oname)
 
 SQInteger sqstd_text_encbyname( const SQChar *name)
 {
+    SQInteger flags = 0;
+    while(1) {
+        static const SQChar f_strict[] = _SC("strict;");
+        static const SQChar f_native[] = _SC("native;");
+        if( memcmp( name, f_strict, sizeof(f_strict)-sizeof(SQChar)) == 0) {
+            flags |= SQTEXTENC_STRICT;
+            name += sizeof(f_strict)/sizeof(SQChar) - 1;
+            continue;
+        }
+        if( memcmp( name, f_native, sizeof(f_native)-sizeof(SQChar)) == 0) {
+            flags |= SQTEXTENC_NATIVE;
+            name += sizeof(f_native)/sizeof(SQChar) - 1;
+            continue;
+        }
+        break;
+    }
     const struct enc_names *enc = encodings_list;
     while( enc->names) {
 		const SQChar **pname = enc->names;
 		while( *pname) {
 			if( compare_encoding_name( *pname, name) == 0) {
-				return enc->enc_id;
+				return enc->enc_id | flags;
 			}
 			pname++;
 		}
@@ -476,16 +492,19 @@ SQInteger sqstd_text_encbyname( const SQChar *name)
     return -1;
 }
 
-const SQChar* sqstd_text_encname( SQInteger enc)
+const SQChar* sqstd_text_encname( SQInteger encoding)
 {
-    const uint16_t tmp = 1;
-    switch( enc)
+    int encoding_flags = encoding & SQTEXTENC_FLAGS;
+    encoding ^= encoding_flags;
+    if( encoding_flags & SQTEXTENC_NATIVE)
+    {
+        encoding = sqstd_text_nativeenc( encoding);
+    }
+    switch( encoding)
     {
         case SQTEXTENC_UTF8:    return __NAMES_UTF_8[0];
-        case SQTEXTENC_N_UTF16: return (*(const uint8_t*)&tmp == 1) ? __NAMES_UTF_16LE[0] : __NAMES_UTF_16BE[0];
         case SQTEXTENC_UTF16BE: return __NAMES_UTF_16BE[0];
         case SQTEXTENC_UTF16LE: return __NAMES_UTF_16LE[0];
-        case SQTEXTENC_N_UTF32: return (*(const uint8_t*)&tmp == 1) ? __NAMES_UTF_32LE[0] : __NAMES_UTF_32BE[0];
         case SQTEXTENC_UTF32BE: return __NAMES_UTF_32BE[0];
         case SQTEXTENC_UTF32LE: return __NAMES_UTF_32LE[0];
         case SQTEXTENC_ASCII:   return __NAMES_ASCII[0];
@@ -495,124 +514,104 @@ const SQChar* sqstd_text_encname( SQInteger enc)
 
 SQInteger sqstd_text_defaultenc( void)
 {
-    const uint16_t tmp = 1;
-    if( sizeof(SQChar) == sizeof(uint8_t))
+    IS_LE(is_le);
+    if( sizeof(SQChar) == 1)
         return SQTEXTENC_UTF8;
-    else if( sizeof(SQChar) == sizeof(uint16_t)) {
-        if( *(const uint8_t*)&tmp == 1) {
-            // localy little endian
+    else if( sizeof(SQChar) == 2) {
+        if( is_le)
             return SQTEXTENC_UTF16LE;
-        }
-        else {
+        else
             return SQTEXTENC_UTF16BE;
-        }
     }
-    else if( sizeof(SQChar) == sizeof(uint32_t)) {
-        if( *(const uint8_t*)&tmp == 1) {
+    else if( sizeof(SQChar) == 4) {
+        if( is_le)
             return SQTEXTENC_UTF32LE;
-        }
-        else {
+        else
             return SQTEXTENC_UTF32BE;
-        }
     }
 }
 
-SQInteger sqstd_text_nativeenc( SQInteger enc)
+SQInteger sqstd_text_nativeenc( SQInteger encoding)
 {
-    const uint16_t tmp = 1;
-    switch(enc)
+    IS_LE(is_le);
+    encoding &= ~SQTEXTENC_FLAGS;
+    switch(encoding)
     {
-        case SQTEXTENC_N_UTF16:
         case SQTEXTENC_UTF16BE:
         case SQTEXTENC_UTF16LE:
-            return (*(const uint8_t*)&tmp == 1) ? SQTEXTENC_UTF16LE : SQTEXTENC_UTF16BE;
-        case SQTEXTENC_N_UTF32:
+            return is_le ? SQTEXTENC_UTF16LE : SQTEXTENC_UTF16BE;
         case SQTEXTENC_UTF32BE:
         case SQTEXTENC_UTF32LE:
-            return (*(const uint8_t*)&tmp == 1) ? SQTEXTENC_UTF32LE : SQTEXTENC_UTF32BE;
+            return is_le ? SQTEXTENC_UTF32LE : SQTEXTENC_UTF32BE;
         default:
-            return enc;
+            return encoding;
     }
 }
 
 static internal_encoding_t get_int_encoding( int encoding)
 {
-    const uint16_t tmp = 1;
-    switch( encoding)
+    int encoding_flags = encoding & SQTEXTENC_FLAGS;
+    bool use_sqchar_cv;
+    IS_LE(is_le);
+    encoding ^= encoding_flags;
+    if( encoding_flags & SQTEXTENC_NATIVE)
     {
-        case SQTEXTENC_UTF8:
-            if( sizeof(SQChar) == sizeof(uint8_t))
+        encoding = sqstd_text_nativeenc( encoding);
+    }
+    {
+        bool is_not_strict = (encoding_flags & SQTEXTENC_STRICT) ? false : true;
+        switch( encoding)
+        {
+            case SQTEXTENC_UTF8:
+                use_sqchar_cv = (sizeof(SQChar) == 1) ? is_not_strict : false;
+                break;
+            case SQTEXTENC_UTF16BE:
+            case SQTEXTENC_UTF16LE:
+                use_sqchar_cv = (sizeof(SQChar) == 2) ? is_not_strict : false;
+                break;
+            case SQTEXTENC_UTF32BE:
+            case SQTEXTENC_UTF32LE:
+                use_sqchar_cv = (sizeof(SQChar) == 4) ? is_not_strict : false;
+                break;
+            default:
+                use_sqchar_cv = false;
+        }
+    }
+    if( use_sqchar_cv) {
+        switch( encoding) {
+            default:
+            case SQTEXTENC_UTF8:
                 return ENC_SQCHAR;
-            else
+            case SQTEXTENC_UTF16BE:
+            case SQTEXTENC_UTF32BE:
+                return is_le ? ENC_SQCHAR_REV : ENC_SQCHAR;
+            case SQTEXTENC_UTF16LE:
+            case SQTEXTENC_UTF32LE:
+                return is_le ? ENC_SQCHAR : ENC_SQCHAR_REV;
+        }
+    }
+    else {
+        switch( encoding)
+        {
+            case SQTEXTENC_UTF8:
                 return ENC_UTF8;
 
-        case SQTEXTENC_UTF16BE:
-            if( *(const uint8_t*)&tmp == 1) {
-                // localy little endian
-                if( sizeof(SQChar) == sizeof(uint16_t))
-                    return ENC_SQCHAR_REV;
-                else
-                    return ENC_UTF16_REV;
-            }
-            else {
-        case SQTEXTENC_N_UTF16:
-                if( sizeof(SQChar) == sizeof(uint16_t))
-                    return ENC_SQCHAR;
-                else
-                    return ENC_UTF16;
-            }
+            case SQTEXTENC_UTF16BE:
+                return is_le ? ENC_UTF16_REV : ENC_UTF16;
+            case SQTEXTENC_UTF16LE:
+                return is_le ? ENC_UTF16 : ENC_UTF16_REV;
 
-        case SQTEXTENC_UTF16LE:
-            if( *(const uint8_t*)&tmp == 1) {
-                // localy little endian
-                if( sizeof(SQChar) == sizeof(uint16_t))
-                    return ENC_SQCHAR;
-                else
-                    return ENC_UTF16;
-            }
-            else {
-                if( sizeof(SQChar) == sizeof(uint16_t))
-                    return ENC_SQCHAR_REV;
-                else
-                    return ENC_UTF16_REV;
-            }
+            case SQTEXTENC_UTF32BE:
+                return is_le ? ENC_UTF32_REV : ENC_UTF32;
+            case SQTEXTENC_UTF32LE:
+                return is_le ? ENC_UTF32 : ENC_UTF32_REV;
 
-        case SQTEXTENC_UTF32BE:
-            if( *(const uint8_t*)&tmp == 1) {
-                // localy little endian
-                if( sizeof(SQChar) == sizeof(uint32_t))
-                    return ENC_SQCHAR_REV;
-                else
-                    return ENC_UTF32_REV;
-            }
-            else {
-        case SQTEXTENC_N_UTF32:
-                if( sizeof(SQChar) == sizeof(uint32_t))
-                    return ENC_SQCHAR;
-                else
-                    return ENC_UTF32;
-            }
+            case SQTEXTENC_ASCII:
+                return ENC_ASCII;
 
-        case SQTEXTENC_UTF32LE:
-            if( *(const uint8_t*)&tmp == 1) {
-                // localy little endian
-                if( sizeof(SQChar) == sizeof(uint32_t))
-                    return ENC_SQCHAR;
-                else
-                    return ENC_UTF32;
-            }
-            else {
-                if( sizeof(SQChar) == sizeof(uint32_t))
-                    return ENC_SQCHAR_REV;
-                else
-                    return ENC_UTF32_REV;
-            }
-
-        case SQTEXTENC_ASCII:
-            return ENC_ASCII;
-
-        default:
-            return ENC_UNKNOWN;
+            default:
+                return ENC_UNKNOWN;
+        }
     }
 }
 
@@ -683,8 +682,6 @@ public:
         _from_min( from.min_char_size),
         _to_mean( to.mean_char_size),
         _errors( 0)
-//        _output(0),
-//        _out_alloc(0)
     {}
 
     int _errors;
@@ -736,25 +733,6 @@ void sqstd_text_release( const void *text, SQUnsignedInteger text_alloc_size)
 
 static SQInteger sqstd_SQChar_to_SQChar( const SQChar *str, SQInteger str_size, const SQChar **pout, SQUnsignedInteger *pout_alloc, SQInteger *pout_size)
 {
-#if 0
-    if( str_size == -1) {
-        str_size = cvSQChar().strsize( (const uint8_t*)str);
-    }
-    SQInteger str_len = str_size / sizeof(SQChar);
-    if( str[str_len] != _SC('\0')) {
-        *pout_alloc = str_size + sizeof(SQChar);
-        SQChar *out = (SQChar*)sq_malloc( *pout_alloc);
-        *pout = out;
-        memcpy( out, str, str_size);
-        out[str_len] = _SC('\0');
-    }
-    else {
-        *pout_alloc = 0;
-        *pout = str;
-    }
-    if( pout_size) *pout_size = str_size;
-    return SQ_OK;
-#else // 0
     if( str_size == -1) {
         str_size = cvSQChar().strsize( (const uint8_t*)str);
         *pout_alloc = 0;
@@ -773,34 +751,10 @@ static SQInteger sqstd_SQChar_to_SQChar( const SQChar *str, SQInteger str_size, 
         if( pout_size) *pout_size = str_size;
         return padding ? SQ_ERROR : SQ_OK;
     }
-#endif // 0
 }
 
 static SQInteger sqstd_SQChar_to_SQCharREV( const SQChar *str, SQInteger str_size, const SQChar **pout, SQUnsignedInteger *pout_alloc, SQInteger *pout_size)
 {
-#if 0
-    if( str_size == -1) {
-        str_size = cvSQChar().strsize( (const uint8_t*)str);
-    }
-    *pout_alloc = str_size + sizeof(SQChar);
-    SQChar *out = (SQChar*)sq_malloc( *pout_alloc);
-    *pout = out;
-    SQInteger str_len = str_size / sizeof(SQChar);
-    out[str_len] = _SC('\0');
-    while( str_len) {
-        if( sizeof(SQChar) == sizeof(uint16_t)) {
-            *out = CV_SWAP_U16( *str);
-        }
-        else if( sizeof(SQChar) == sizeof(uint32_t)) {
-            *out = CV_SWAP_U32( *str);
-        }
-        out++;
-        str++;
-        str_len--;
-    }
-    if( pout_size) *pout_size = str_size;
-    return SQ_OK;
-#else // 0
     int padding = 0;
     if( str_size == -1) {
         str_size = cvSQChar().strsize( (const uint8_t*)str);
@@ -827,7 +781,6 @@ static SQInteger sqstd_SQChar_to_SQCharREV( const SQChar *str, SQInteger str_siz
     }
     if( pout_size) *pout_size = str_size;
     return padding ? SQ_ERROR : SQ_OK;
-#endif // 0
 }
 
 /* ------------------------------------
@@ -840,11 +793,6 @@ static SQInteger UTF_to_SQChar( const void *inbuf, SQInteger inbuf_size,
     if( inbuf_size == -1) {
         inbuf_size = cv.strsize( (const uint8_t*)inbuf);
     }
-#if 0
-    else {
-        inbuf_size -= inbuf_size % cv.min_char_size;
-    }
-#endif // 0
     cvTextAlloc cvt( cv, cvSQChar());
     SQChar *outbuf_end;
     size_t  outbuf_alloc;
@@ -1498,13 +1446,11 @@ static SQTextWriter *create_writer_by_enc( int encoding, SQSTREAM stream, const 
 
 static int write_BOM( SQSTREAM stream, int encoding)
 {
-    if( (encoding == SQTEXTENC_N_UTF16) || (encoding == SQTEXTENC_N_UTF32)) {
-        const uint16_t tmp = 1;
-        if( *(const uint8_t*)&tmp == 1)
-            // localy little endian
-            encoding += SQTEXTENC_UTF16LE - SQTEXTENC_N_UTF16;
-        else
-            encoding += SQTEXTENC_UTF16BE - SQTEXTENC_N_UTF16;
+    int encoding_flags = encoding & SQTEXTENC_FLAGS;
+    encoding ^= encoding_flags;
+    if( encoding_flags & SQTEXTENC_NATIVE)
+    {
+        encoding = sqstd_text_nativeenc( encoding);
     }
     switch( encoding)
     {
