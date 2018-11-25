@@ -891,11 +891,11 @@ SQInteger sqstd_text_get(HSQUIRRELVM v, SQInteger idx, int encoding, SQSTDTEXTCV
     return 0;
 }
 
-SQInteger sqstd_push_UTF(HSQUIRRELVM v, int encoding, const void *inbuf, SQInteger inbuf_size)
+SQInteger sqstd_text_push(HSQUIRRELVM v, int encoding, const void *inbuf, SQInteger inbuf_size)
 {
     SQSTDTEXTCV textcv;
     SQInteger r = sqstd_text_fromutf( encoding, inbuf, inbuf_size, &textcv);
-    sq_pushstring(v, textcv->text, textcv->measure);
+    sq_pushstring(v, (const SQChar*)textcv.text, textcv.measure);
     sqstd_text_release( &textcv);
     return r;
 }
@@ -1361,7 +1361,7 @@ struct SQTextWriterCV : SQTextWriter
     {
         const uint8_t *rdbuf = (const uint8_t*)str;
         uint32_t wc;
-        int r;
+        int r = CV_OK;
         if( str_len == -1) {
             str_len = cvSQChar().strsize( (const uint8_t*)str) / sizeof(SQChar);
         }
@@ -1543,7 +1543,7 @@ static SQRESULT _textrw_blobtostr(HSQUIRRELVM v)
     if( sq_gettop(v) > 3) {
         sq_getbool(v,4,&is_strict);
     }
-    SQInteger r = sqstd_push_UTF(v,enc_id,ptr,size);
+    SQInteger r = sqstd_text_push(v,enc_id,ptr,size);
     if( is_strict && r) {
         return sq_throwerror(v,_SC("Text conversion failed"));
     }
@@ -1554,9 +1554,7 @@ static SQRESULT _textrw_strtoblob(HSQUIRRELVM v)
 {
     const SQChar *enc;
     int enc_id;
-    const void *out;
-    SQUnsignedInteger out_alloc;
-    SQInteger out_size;
+    SQSTDTEXTCV out;
     SQBool is_strict = SQFalse;
     sq_getstring(v,3,&enc);
     enc_id = sqstd_text_encbyname( enc);
@@ -1566,15 +1564,15 @@ static SQRESULT _textrw_strtoblob(HSQUIRRELVM v)
     if( sq_gettop(v) > 3) {
         sq_getbool(v,4,&is_strict);
     }
-    SQInteger r = sqstd_text_get(v,2,enc_id,&out,&out_alloc,&out_size);
+    SQInteger r = sqstd_text_get(v,2,enc_id,&out);
     if( is_strict && r) {
-        sqstd_text_release(out,out_alloc);
+        sqstd_text_release(&out);
         return sq_throwerror(v,_SC("Text conversion failed"));
     }
     else {
-        SQUserPointer blob = sqstd_createblob(v,out_size);
-        memcpy(blob,out,out_size);
-        sqstd_text_release(out,out_alloc);
+        SQUserPointer blob = sqstd_createblob(v,out.measure);
+        memcpy(blob,out.text,out.measure);
+        sqstd_text_release(&out);
         return 1;
     }
 }
