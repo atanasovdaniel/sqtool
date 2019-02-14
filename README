@@ -1,0 +1,15 @@
+SQTool is a portable general purpose scripting tool powered by The programming language SQUIRREL.
+
+SQTool is currently in development phase, so any API can change by name and/or by functionality.
+
+The SQUIRREL is included as git submodule in this repository, so don't forget to run one of:
+	git clone --recursive https://github.com/atanasovdaniel/sqtool.git
+or
+	git clone https://github.com/atanasovdaniel/sqtool.git
+	cd sqtool
+	git submodule update --init --recursive
+
+Unfortunately "Download ZIP" doesn't include the SQUIRREL. You can download it manually from https://github.com/atanasovdaniel/squirrel/tree/sqtool
+
+Autor: Daniel Atanasov
+e-mail: danielatanasov//gmail//com

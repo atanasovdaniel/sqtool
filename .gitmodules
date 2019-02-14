@@ -1,0 +1,4 @@
+[submodule "squirrel"]
+	path = squirrel
+	url = https://github.com/atanasovdaniel/squirrel.git
+	branch = sqtool
